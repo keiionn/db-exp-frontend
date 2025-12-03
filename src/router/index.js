@@ -1,0 +1,98 @@
+import { createRouter, createWebHistory } from 'vue-router'
+import store from '../store' // 导入store实例
+
+// 导入必需的 View 组件
+import LoginView from '../views/LoginView.vue'
+import CommunityView from '@/views/CommunityView.vue'
+import PostDetailView from '@/views/PostDetailView.vue' // ✅ 新增导入
+
+const routes = [
+  {
+    path: '/',
+    redirect: '/home' // 重定向到主页
+  },
+  {
+    path: '/login',
+    name: 'Login',
+    component: LoginView
+  },
+  {
+    path: '/register',
+    name: 'Register',
+    component: () => import('@/views/RegisterView.vue')
+  },
+  {
+    path: '/home',
+    name: 'Home',
+    component: () => import('@/views/HomeView.vue'),
+    // ✅ 移除 requiresAuth: true，允许未登录用户浏览首页
+  },
+  {
+    path: '/dashboard',
+    name: 'Dashboard',
+    component: () => import('@/views/DashboardView.vue'),
+    meta: { requiresAuth: true } // 仪表盘是私有页面，保持认证要求
+  },
+  {
+    path: '/community/:name',
+    name: 'Community',
+    component: CommunityView
+    // 社区主页默认公开
+  },
+  // ✅ 新增：帖子详情页路由
+  {
+    path: '/community/:name/post/:id',
+    name: 'PostDetail',
+    component: PostDetailView 
+  },
+  // ✅ 新增：发帖页路由（需要认证）
+  {
+    path: '/community/:name/submit',
+    name: 'SubmitPost',
+    component: () => import('@/views/SubmitPostView.vue'), // 假设您会创建此组件
+    meta: { requiresAuth: true }
+  },
+  // ✅ 新增：404 页面
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('@/views/NotFound.vue') // 假设您会创建此组件
+  }
+]
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes
+})
+
+// 全局前置守卫 (逻辑非常完善，仅调整打印信息)
+router.beforeEach((to, from, next) => {
+  const isAuthenticated = store.getters.isAuthenticated
+  // 打印信息更简洁
+  // console.log(`路由守卫: 目标路径=${to.path}, 认证状态=${isAuthenticated}`)
+
+  // 1. 如果用户已登录，并且尝试访问登录或注册页，重定向到主页
+  if (isAuthenticated && (to.name === 'Login' || to.name === 'Register')) {
+    next({ name: 'Home' })
+    return
+  }
+
+  // 2. 检查目标路由是否需要认证
+  if (to.matched.some(record => record.meta.requiresAuth)) {
+    if (!isAuthenticated) {
+      // 未认证，重定向到登录页
+      // console.log('未认证，重定向到登录页')
+      next('/login')
+    } else {
+      // 已认证，放行
+      // console.log('已认证，放行')
+      next()
+    }
+  } else {
+    // 3. 不需要认证的路由直接放行
+    // console.log('无需认证的路由，放行')
+    next() 
+  }
+})
+
+export default router
