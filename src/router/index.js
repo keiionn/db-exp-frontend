@@ -2,61 +2,66 @@ import { createRouter, createWebHistory } from 'vue-router'
 import store from '../store' // 导入store实例
 
 // 导入必需的 View 组件
-import LoginView from '../views/LoginView.vue'
+import LoginView from '@/views/LoginView.vue'
 import CommunityView from '@/views/CommunityView.vue'
-import PostDetailView from '@/views/PostDetailView.vue' // ✅ 新增导入
+import PostDetailView from '@/views/PostDetailView.vue'
+import HomeView from '@/views/HomeView.vue'
 
 const routes = [
   {
     path: '/',
-    redirect: '/home' // 重定向到主页
+    redirect: '/login' // 重定向到主页
   },
   {
     path: '/login',
     name: 'Login',
     component: LoginView
+    //登录的路由
   },
   {
     path: '/register',
     name: 'Register',
     component: () => import('@/views/RegisterView.vue')
+    //注册用户的路由
   },
   {
     path: '/home',
     name: 'Home',
-    component: () => import('@/views/HomeView.vue'),
-    // ✅ 移除 requiresAuth: true，允许未登录用户浏览首页
+    component: HomeView,
+    meta: { requiresAuth: true }
+    //首页的路由
   },
   {
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('@/views/DashboardView.vue'),
-    meta: { requiresAuth: true } // 仪表盘是私有页面，保持认证要求
+    meta: { requiresAuth: true }
+    //个人主页的路由
   },
   {
     path: '/community/:name',
     name: 'Community',
     component: CommunityView
-    // 社区主页默认公开
+    // 社区的路由
   },
-  // ✅ 新增：帖子详情页路由
   {
     path: '/community/:name/post/:id',
     name: 'PostDetail',
     component: PostDetailView 
+    //帖子的路由
   },
-  // ✅ 新增：发帖页路由（需要认证）
   {
-    path: '/community/:name/submit',
+    path: '/submitpost',
     name: 'SubmitPost',
-    component: () => import('@/views/SubmitPostView.vue'), // 假设您会创建此组件
+    component: () => import('@/views/SubmitPostView.vue'),
     meta: { requiresAuth: true }
+    //发布帖子的路由
   },
-  // ✅ 新增：404 页面
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
-    component: () => import('@/views/NotFound.vue') // 假设您会创建此组件
+    component: () => import('@/views/NotFound.vue')
+    //404
   }
 ]
 
