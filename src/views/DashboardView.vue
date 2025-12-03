@@ -1,7 +1,9 @@
 <template>
   <div class="dashboard-container">
     <h1>我的主页</h1>
-
+    <router-link to="/home" class="btn position top-right">
+      返回首页
+    </router-link>
     <!-- 显示当前用户（从 Vuex 获取） -->
     <div class="user-info">
       <p><strong>用户名：</strong> {{ user.username }}</p>
@@ -18,9 +20,8 @@
       <button class="btn" @click="changePassword">更改密码</button>
     </div>
 
-    <!-- ✨ 我发布的帖子 -->
     <div class="my-posts-section">
-      <h2>我发布的帖子</h2>
+      <h2>发布的帖子</h2>
 
       <div v-if="userPosts.length > 0">
         <div
@@ -119,6 +120,40 @@ export default {
 }
 .btn.danger {
   background: #e74c3c;
+}
+
+.btn.position {
+  position: absolute;
+}
+
+/* 常见位置预设 */
+.btn.top-left {
+  top: 20px;
+  left: 20px;
+}
+
+.btn.top-right {
+  top: 20px;
+  right: 20px;
+}
+
+.btn.bottom-left {
+  bottom: 20px;
+  left: 20px;
+}
+
+.btn.bottom-right {
+  bottom: 20px;
+  right: 20px;
+}
+
+/* 创建一个完全自由可控位置 */
+.btn.custom-pos {
+  position: absolute;
+  top: var(--btn-top, auto);
+  left: var(--btn-left, auto);
+  right: var(--btn-right, auto);
+  bottom: var(--btn-bottom, auto);
 }
 
 .my-posts-section {
