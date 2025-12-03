@@ -70,14 +70,14 @@ export default {
     };
   },
   computed: {
-    communityName() {
+    getCommunityName() {
       // 从路由参数中获取社区名称
       return this.$route.params.name;
     }
   },
   watch: {
     // 监听路由参数变化，如果社区名改变，重新加载数据
-    communityName: {
+    getCommunityName: {
       immediate: true, // 立即执行一次
       handler() {
         this.fetchCommunityData();

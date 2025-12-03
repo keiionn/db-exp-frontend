@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import store from '../store' // 导入store实例
+import store from '../store'
 
 // 导入必需的 View 组件
 import LoginView from '@/views/LoginView.vue'
@@ -10,7 +10,7 @@ import HomeView from '@/views/HomeView.vue'
 const routes = [
   {
     path: '/',
-    redirect: '/login' // 重定向到主页
+    redirect: '/home'
   },
   {
     path: '/login',
@@ -51,11 +51,11 @@ const routes = [
     //帖子的路由
   },
   {
-    path: '/submitpost',
-    name: 'SubmitPost',
-    component: () => import('@/views/SubmitPostView.vue'),
+    path: '/createcommunity',
+    name: 'createcommunity',
+    component: () => import('@/views/CreateCommunityView.vue'),
     meta: { requiresAuth: true }
-    //发布帖子的路由
+    //创建社区的路由
   },
   {
     path: '/:pathMatch(.*)*',

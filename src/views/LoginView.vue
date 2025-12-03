@@ -136,12 +136,6 @@ export default {
 
 <style scoped>
 /* 这里放置所有的CSS样式 */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
 
 .login-container {
   background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
