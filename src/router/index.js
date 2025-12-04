@@ -3,7 +3,7 @@ import store from '../store'
 
 // 导入必需的 View 组件
 import LoginView from '@/views/LoginView.vue'
-import CommunityView from '@/views/CommunityView.vue'
+import CommunityDetailView from '@/views/CommunityDetailView.vue'
 import PostDetailView from '@/views/PostDetailView.vue'
 import HomeView from '@/views/HomeView.vue'
 
@@ -40,9 +40,9 @@ const routes = [
   },
   {
     path: '/community/:name',
-    name: 'Community',
-    component: CommunityView
-    // 社区的路由
+    name: 'CommunityDetail',
+    component: () => import('@/views/CommunityDetailView.vue')
+    // 社区详情路由
   },
   {
     path: '/community/:name/post/:id',

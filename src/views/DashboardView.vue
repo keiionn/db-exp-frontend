@@ -8,7 +8,7 @@
     <div class="user-info">
       <p><strong>用户名：</strong> {{ getUserInfo.username }}</p>
     </div>
-    <div class="submit-post">
+    <div class="submit-community">
       <h2>社区管理</h2>
       <button class="btn" @click="createCommunity">创建社区</button>
     </div>
@@ -23,8 +23,8 @@
     <div class="my-posts-section">
       <h2>我的社区</h2>
 
-      <div v-if="userposts.length > 0">
-        <div class="post-card" v-for="post in userposts" @click="goToPost(post)">
+      <div v-if="usercommunities.length > 0">
+        <div class="community-card" v-for="post in usercommunities" @click="goToCommunity(post)">
           <h3>{{ post.title }}</h3>
           <p>{{ post.content.substring(0, 100) }}...</p>
           <div class="post-meta">
@@ -40,11 +40,11 @@
     <div class="my-posts-section">
       <h2>关注的社区</h2>
 
-      <div v-if="subscribedposts.length > 0">
-        <div class="post-card" v-for="post in subscribedposts" :key="post.id" @click="goToPost(post)">
+      <div v-if="subscribedcommunities.length > 0">
+        <div class="community-card" v-for="post in subscribedcommunities" @click="goToCommunity(post)">
           <h3>{{ post.title }}</h3>
           <p>{{ post.content.substring(0, 100) }}...</p>
-          <div class="post-meta">
+          <div class="community-meta">
             <span>👍 {{ post.upvotes }}</span>
             <span>💬 {{ post.comments }}</span>
             <span class="community-tag">r/{{ post.communityName }}</span>
@@ -73,8 +73,8 @@ export default {
   data() {
     return {
       // 帖子数据（你之后可从 API 加载）
-      userposts: [],
-      subscribedposts: []
+      usercommunities: [],
+      subscribedcommunities: []
     };
   },
 
@@ -88,11 +88,11 @@ export default {
     async fetchUserPosts() {
       /* try {
         const response = await axios.get(`http://localhost:8081/myposts_search/${this.user.id}`);
-        this.userPosts = response.data;
+        this.usercommunities = response.data;
       } catch (error) {
         console.error("获取用户帖子失败", error);
       } */
-     this.userposts = [
+     this.usercommunities = [
       { id: 101, communityName: "vue", title: "Vue 3.5 新功能展望", content: "期待 Composition API...", upvotes: 450, comments: 20, authorId: 1 },
       { id: 102, communityName: "tech", title: "AI 伦理的未来挑战", content: "我们该如何规范...", upvotes: 800, comments: 55, authorId: 2 }
     ];
@@ -100,18 +100,18 @@ export default {
     async fetchsubscribedPosts() {
       /* try {
         const response = await axios.get(`http://localhost:8081/subscribedposts_search/${this.user.id}`);
-        this.userPosts = response.data;
+        this.subscribedcommunities = response.data;
       } catch (error) {
         console.error("获取用户帖子失败", error);
       } */
-     this.subscribedposts = [
+     this.subscribedcommunities = [
       { id: 101, communityName: "vue", title: "Vue 3.5 新功能展望", content: "期待 Composition API...", upvotes: 450, comments: 20, authorId: 1 },
       { id: 102, communityName: "tech", title: "AI 伦理的未来挑战", content: "我们该如何规范...", upvotes: 800, comments: 55, authorId: 2 }
     ];
     },
 
-    goToPost(post) {
-      this.$router.push(`/community/${post.communityName}/post/${post.id}`);
+    goToCommunity(post) {
+      this.$router.push(`/community/${post.communityName}`);
     },
 
     changePassword() {
@@ -199,7 +199,7 @@ export default {
   padding-top: 20px;
 }
 
-.post-card {
+.community-card {
   background: white;
   border-radius: 8px;
   padding: 20px;
@@ -209,12 +209,12 @@ export default {
   transition: 0.25s;
 }
 
-.post-card:hover {
+.community-card:hover {
   transform: translateY(-3px);
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
 }
 
-.post-meta {
+.community-meta {
   display: flex;
   gap: 20px;
   color: #888;

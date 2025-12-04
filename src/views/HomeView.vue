@@ -49,7 +49,6 @@ export default {
     return {
       searchQuery: "",
 
-      // 🔥 模拟所有帖子（与 Dashboard 共用，可后续放 Vuex）
       allPosts: [
         { id: 101, communityName: "vue", title: "Vue 3.5 新功能展望", content: "期待 Composition API...", upvotes: 450, comments: 20, authorId: 1 },
         { id: 102, communityName: "tech", title: "AI 伦理的未来挑战", content: "我们该如何规范...", upvotes: 800, comments: 55, authorId: 2 },

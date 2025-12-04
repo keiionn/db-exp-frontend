@@ -5,11 +5,18 @@
 </template>
 
 <script setup>
-// 不需要额外的导入，因为使用了 <router-view>
+import { onMounted } from "vue";
+import { useStore } from "vuex";
+
+const store = useStore();
+
+// ⭐ 页面加载时自动尝试登录（自动带上 JSESSIONID）
+onMounted(async () => {
+  await store.dispatch("autoLogin");
+});
 </script>
 
 <style>
-/* 全局样式重置 */
 * {
   margin: 0;
   padding: 0;
