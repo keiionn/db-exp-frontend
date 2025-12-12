@@ -4,122 +4,213 @@
     <router-link to="/home" class="btn position top-right">
       返回首页
     </router-link>
-    <!-- 显示当前用户（从 Vuex 获取） -->
+    
     <div class="user-info">
       <p><strong>用户名：</strong> {{ getUserInfo.username }}</p>
+      <p v-if="getUserInfo.email"><strong>邮箱：</strong> {{ getUserInfo.email }}</p>
     </div>
+
     <div class="submit-community">
       <h2>社区管理</h2>
       <button class="btn" @click="createCommunity">创建社区</button>
     </div>
 
-    <!-- 账户管理功能 -->
     <div class="user-management">
       <h2>账户管理</h2>
-
-      <button class="btn" @click="changePassword">更改密码</button>
+      <button class="btn" @click="openPasswordModal">更改密码</button>
+      <button class="btn" @click="openEmailModal">更改邮箱</button>
     </div>
 
-    <div class="my-posts-section">
+    <div class="my-communities-section">
       <h2>我的社区</h2>
-
       <div v-if="usercommunities.length > 0">
-        <div class="community-card" v-for="post in usercommunities" @click="goToCommunity(post)">
-          <h3>{{ post.title }}</h3>
-          <p>{{ post.content.substring(0, 100) }}...</p>
+        <div class="community-card" v-for="community in usercommunities" :key="community.communityId" @click="goToCommunity(community)">
+          <h3>{{ community.title }}</h3>
+          <p>{{ community.content ? community.content.substring(0, 100) : '' }}...</p>
           <div class="post-meta">
-            <span>👍 {{ post.upvotes }}</span>
-            <span>💬 {{ post.comments }}</span>
-            <span class="community-tag">r/{{ post.communityName }}</span>
+            <span class="community-tag">{{ community.communityName }}</span>
           </div>
         </div>
       </div>
-
-      <p v-else class="empty">暂无帖子</p>
+      <p v-else class="empty">暂无社区</p>
     </div>
-    <div class="my-posts-section">
-      <h2>关注的社区</h2>
 
-      <div v-if="subscribedcommunities.length > 0">
-        <div class="community-card" v-for="post in subscribedcommunities" @click="goToCommunity(post)">
-          <h3>{{ post.title }}</h3>
-          <p>{{ post.content.substring(0, 100) }}...</p>
-          <div class="community-meta">
-            <span>👍 {{ post.upvotes }}</span>
-            <span>💬 {{ post.comments }}</span>
-            <span class="community-tag">r/{{ post.communityName }}</span>
-          </div>
+    <div v-if="showPasswordModal" class="modal-overlay" @click.self="closePasswordModal">
+      <div class="modal-content">
+        <h3>修改密码</h3>
+        <div class="form-group">
+          <label>旧密码</label>
+          <input type="password" v-model="pwdForm.oldPassword" placeholder="请输入旧密码">
+        </div>
+        <div class="form-group">
+          <label>新密码</label>
+          <input type="password" v-model="pwdForm.newPassword" placeholder="请输入新密码">
+        </div>
+        <div class="form-group">
+          <label>确认新密码</label>
+          <input type="password" v-model="pwdForm.confirmPassword" placeholder="再次输入新密码">
+        </div>
+        <div class="modal-actions">
+          <button class="btn cancel" @click="closePasswordModal">取消</button>
+          <button class="btn" @click="submitPasswordChange">确认修改</button>
         </div>
       </div>
-
-      <p v-else class="empty">暂无帖子</p>
     </div>
+
+    <div v-if="showEmailModal" class="modal-overlay" @click.self="closeEmailModal">
+      <div class="modal-content">
+        <h3>绑定新邮箱</h3>
+        <div class="form-group">
+          <label>新邮箱地址</label>
+          <input type="email" v-model="emailForm.newEmail" placeholder="example@mail.com">
+        </div>
+        <div class="form-group">
+          <label>当前密码（验证身份）</label>
+          <input type="password" v-model="emailForm.password" placeholder="请输入密码以确认">
+        </div>
+        <div class="modal-actions">
+          <button class="btn cancel" @click="closeEmailModal">取消</button>
+          <button class="btn" @click="submitEmailChange">确认修改</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
 <script>
-import CreateCommunityView from './CreateCommunityView.vue';
+import api from "@/api";
 
 export default {
   name: "DashboardView",
 
   computed: {
-    // 从 Vuex 读取当前登录用户
     getUserInfo() {
-      return this.$store.state.user;
-    },
+      // 增加空值保护，防止报错
+      return this.$store.state.user || {};
+    }
   },
 
   data() {
     return {
-      // 帖子数据（你之后可从 API 加载）
       usercommunities: [],
-      subscribedcommunities: []
+      subscribedcommunities: [],
+      
+      // --- 新增：弹窗控制状态 ---
+      showPasswordModal: false,
+      showEmailModal: false,
+
+      // --- 新增：表单数据 ---
+      pwdForm: {
+        oldPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      },
+      emailForm: {
+        newEmail: '',
+        password: ''
+      }
     };
   },
 
   mounted() {
-    this.fetchUserPosts();
-    this.fetchsubscribedPosts();
+    // 增加判断，如果有用户ID才请求，防止未登录报错
+    if (this.getUserInfo && this.getUserInfo.userId) {
+      this.fetchUserPosts();
+      this.fetchSubscribedPosts();
+    }
   },
 
   methods: {
-
+    // ... (原有的获取数据方法保持不变) ...
     async fetchUserPosts() {
-      /* try {
-        const response = await axios.get(`http://localhost:8081/myposts_search/${this.user.id}`);
-        this.usercommunities = response.data;
-      } catch (error) {
-        console.error("获取用户帖子失败", error);
-      } */
-     this.usercommunities = [
-      { id: 101, communityName: "vue", title: "Vue 3.5 新功能展望", content: "期待 Composition API...", upvotes: 450, comments: 20, authorId: 1 },
-      { id: 102, communityName: "tech", title: "AI 伦理的未来挑战", content: "我们该如何规范...", upvotes: 800, comments: 55, authorId: 2 }
-    ];
+      try {
+        const res = await api.get(`/api/communities/myCommunities/${this.getUserInfo.userId}`);
+        this.usercommunities = res.data;
+      } catch (err) {
+        console.error("获取用户创建的社区失败:", err);
+      }
     },
-    async fetchsubscribedPosts() {
-      /* try {
-        const response = await axios.get(`http://localhost:8081/subscribedposts_search/${this.user.id}`);
-        this.subscribedcommunities = response.data;
-      } catch (error) {
-        console.error("获取用户帖子失败", error);
-      } */
-     this.subscribedcommunities = [
-      { id: 101, communityName: "vue", title: "Vue 3.5 新功能展望", content: "期待 Composition API...", upvotes: 450, comments: 20, authorId: 1 },
-      { id: 102, communityName: "tech", title: "AI 伦理的未来挑战", content: "我们该如何规范...", upvotes: 800, comments: 55, authorId: 2 }
-    ];
+    async fetchSubscribedPosts() {
+      try {
+        const res = await api.get(`/api/communities/subscribed/${this.getUserInfo.userId}`);
+        this.subscribedcommunities = res.data;
+      } catch (err) {
+        console.error("获取用户关注的社区失败:", err);
+      }
     },
-
-    goToCommunity(post) {
-      this.$router.push(`/community/${post.communityName}`);
+    goToCommunity(community) {
+      this.$router.push(`/communities/${community.communityId}`);
     },
-
-    changePassword() {
-      this.$router.push(`/community/${post.communityName}/post/${post.id}`);
-    },
-
     createCommunity() {
-      this.$router.push(`/createcommunity`);
+      this.$router.push("/createcommunity");
+    },
+
+    // --- 新增：修改密码逻辑 ---
+    openPasswordModal() {
+      this.pwdForm = { oldPassword: '', newPassword: '', confirmPassword: '' }; // 重置表单
+      this.showPasswordModal = true;
+    },
+    closePasswordModal() {
+      this.showPasswordModal = false;
+    },
+    async submitPasswordChange() {
+      const { oldPassword, newPassword, confirmPassword } = this.pwdForm;
+
+      // 1. 本地校验
+      if (!oldPassword || !newPassword) return alert("请填写完整信息");
+      if (newPassword !== confirmPassword) return alert("两次输入的密码不一致");
+      if (newPassword.length < 6) return alert("新密码长度不能少于6位");
+
+      try {
+        // 2. 发送请求 (请根据你的后端实际接口修改路径)
+        await api.post('/api/user/change-password', {
+          userId: this.getUserInfo.userId,
+          oldPassword,
+          newPassword
+        });
+        
+        alert("密码修改成功，请重新登录");
+        this.closePasswordModal();
+        // 可选：退出登录逻辑
+        // this.$store.dispatch('logout');
+        // this.$router.push('/login');
+      } catch (err) {
+        alert(err.response?.data?.message || "修改密码失败");
+      }
+    },
+
+    // --- 新增：修改邮箱逻辑 ---
+    openEmailModal() {
+      this.emailForm = { newEmail: '', password: '' };
+      this.showEmailModal = true;
+    },
+    closeEmailModal() {
+      this.showEmailModal = false;
+    },
+    async submitEmailChange() {
+      const { newEmail, password } = this.emailForm;
+
+      // 1. 本地校验
+      if (!newEmail || !password) return alert("请填写完整信息");
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(newEmail)) return alert("请输入有效的邮箱格式");
+
+      try {
+        // 2. 发送请求
+        await api.post('/api/user/change-email', {
+          userId: this.getUserInfo.userId,
+          newEmail,
+          password // 通常修改敏感信息需要验证当前密码
+        });
+
+        alert("邮箱修改成功");
+        // 如果 Vuex 中存了 email，这里最好更新一下 store
+        // this.$store.commit('UPDATE_USER_EMAIL', newEmail);
+        this.closeEmailModal();
+      } catch (err) {
+        alert(err.response?.data?.message || "修改邮箱失败");
+      }
     }
   }
 };
@@ -194,7 +285,7 @@ export default {
   bottom: var(--btn-bottom, auto);
 }
 
-.my-posts-section {
+.my-communities-section {
   border-top: 1px solid #eee;
   padding-top: 20px;
 }
@@ -232,5 +323,74 @@ export default {
 .empty {
   color: #777;
   margin-top: 10px;
+}
+.modal-overlay {
+  position: fixed; /* 关键：固定在视口 */
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5); /* 半透明黑色背景 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000; /* 确保覆盖页面上的其他元素 */
+}
+
+/* 弹窗主体 */
+.modal-content {
+  background: white;
+  padding: 25px;
+  border-radius: 10px;
+  width: 400px;
+  max-width: 90%;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+}
+
+.modal-content h3 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  color: #333;
+  text-align: center;
+}
+
+/* 表单组 */
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+  font-size: 0.9em;
+  color: #555;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  box-sizing: border-box; 
+  outline: none;
+}
+
+/* 底部按钮区域 */
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+/* 取消按钮样式 */
+.btn.cancel {
+  background: #f5f5f5;
+  color: #666;
+  border: 1px solid #ddd;
+  margin-right: 10px;
+}
+.btn.cancel:hover {
+  background: #e0e0e0;
 }
 </style>

@@ -45,6 +45,8 @@
 </template>
 
 <script>
+import api from "@/api";
+
 export default {
   name: "CreateCommunityView",
   data() {
@@ -56,12 +58,28 @@ export default {
     };
   },
   methods: {
-    createCommunity() {
-      console.log("创建社区：", this.form);
-      alert("社区已创建！（示例，无后端）");
+    async createCommunity() {
+      try {
+        // 获取当前用户ID（假设存储在store中）
+        const authorId = this.$store.state.user.userId;
+        
+        const response = await api.post("/api/communities/createCommunity", {
+          communityName: this.form.name,
+          title: this.form.name, // 使用社区名称作为标题
+          description: this.form.description,
+          authorId: authorId
+        });
 
-      // 将来可加入后端请求
-      // await axios.post("http://localhost:8081/community/create", this.form)
+        if (response.data && response.data.communityId) {
+          alert(`社区 ${this.form.name} 创建成功！`);
+          this.$router.push(`/community/${response.data.communityId}`);
+        } else {
+          throw new Error("创建社区失败");
+        }
+      } catch (err) {
+        console.error("创建社区失败:", err);
+        alert("创建社区失败，请重试");
+      }
     },
   },
 };

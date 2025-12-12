@@ -52,6 +52,8 @@
 </template>
 
 <script>
+import api from '@/api/index'; 
+
 export default {
   name: "LoginView",
   data() {
@@ -69,10 +71,9 @@ export default {
       isLoading: false,
       apiError: "",
       
-      // 👇 修改点 2: 添加控制 Header 文本的状态变量
       headerText: "请登录您的账户继续", 
       isHeaderError: false,
-      headerTimer: null // 用于存储定时器ID，防止频繁点击时的冲突
+      headerTimer: null 
     };
   },
   methods: {
@@ -94,18 +95,15 @@ export default {
       return !this.errors.username && !this.errors.password;
     },
 
-    // 👇 修改点 3: 添加显示临时错误的辅助方法
-    triggerHeaderError() {
-      // 如果已经有定时器在运行，先清除它
+    triggerHeaderError(text) {
       if (this.headerTimer) clearTimeout(this.headerTimer);
 
-      this.headerText = "用户名或密码错误";
-      this.isHeaderError = true; // 触发红色样式
+      this.headerText = text;
+      this.isHeaderError = true;
 
-      // 2秒后恢复
       this.headerTimer = setTimeout(() => {
         this.headerText = "请登录您的账户继续";
-        this.isHeaderError = false; // 恢复默认样式
+        this.isHeaderError = false;
         this.headerTimer = null;
       }, 2000);
     },
@@ -117,38 +115,39 @@ export default {
       this.apiError = '';
 
       try {
-        const response = await fetch('http://localhost:8081/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: this.form.username,
-            password: this.form.password
-          }),
-          credentials: 'include'
+        const response = await api.post('/api/auth/login', {
+          username: this.form.username,
+          password: this.form.password
         });
 
-        if (response.status === 200) {
-          const data = await response.json();
-          this.$store.commit('setUser', {
-            userId: data.userId,
-            username: data.username,
-            email: data.email
-          });
-          this.$router.push('/home');
-        } else if (response.status === 401) {
-          // 👇 修改点 4: 登录失败(401)时调用头部错误提示
-          this.triggerHeaderError();
-          
-          // 如果不想底部同时也显示文字，可以注释掉下面这行
-          // const data = await response.json();
-          // this.apiError = data.message || '用户名或密码错误';
-        } else {
-          this.apiError = '登录失败，请稍后再试';
-        }
+        const data = response.data; // axios 的返回数据在 .data 中
+        
+        this.$store.commit('setUser', {
+          userId: data.userId,
+          username: data.username,
+          email: data.email
+        });
+        
+        this.$router.push('/home');
 
-      } catch (err) {
-        console.error(err);
-        this.apiError = '网络错误，请检查后重试';
+      } catch (error) {
+        console.error("登录错误:", error);
+        
+        if (error.response) {
+            const status = error.response.status;
+            
+            if (status === 401) {
+                this.triggerHeaderError("用户名或密码错误");
+            } else if (status === 404) {
+                this.triggerHeaderError("接口不存在");
+            } else {
+                this.triggerHeaderError(`登录失败 (${status})`);
+            }
+        } else if (error.code === 'ECONNABORTED') {
+            this.triggerHeaderError("请求超时，请检查网络");
+        } else {
+            this.triggerHeaderError("网络连接异常");
+        }
       } finally {
         this.isLoading = false;
       }
@@ -170,16 +169,12 @@ export default {
 </script>
 
 <style scoped>
-/* ... (保留你之前的样式) ... */
-
-/* 👇 修改点 5: 添加头部错误状态的样式 */
 .header-error {
   color: #ff3860; /* 红色警告色 */
   font-weight: bold;
   animation: shake 0.3s ease-in-out; /* 可选：加一个轻微抖动效果 */
 }
 
-/* 可选的抖动动画 keyframes */
 @keyframes shake {
   0% { transform: translateX(0); }
   25% { transform: translateX(-5px); }
@@ -188,7 +183,6 @@ export default {
   100% { transform: translateX(0); }
 }
 
-/* 以下是你原来的代码，保持不变 */
 .login-container {
   background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
   display: flex;

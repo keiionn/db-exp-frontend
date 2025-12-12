@@ -1,8 +1,8 @@
-// 统一API管理入口
-import user from './user';
-import community from './community';
+import axios from 'axios';
 
-export default {
-  user,
-  community
-};
+const api = axios.create({
+  baseURL: 'http://localhost:8081', // 你的后端地址
+  timeout: 5000
+});
+
+export default api;

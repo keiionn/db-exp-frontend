@@ -39,15 +39,15 @@ const routes = [
     //个人主页的路由
   },
   {
-    path: '/community/:name',
+    path: '/community/:id',
     name: 'CommunityDetail',
     component: () => import('@/views/CommunityDetailView.vue')
     // 社区详情路由
   },
   {
-    path: '/community/:name/post/:id',
+    path: '/post/:id',
     name: 'PostDetail',
-    component: PostDetailView 
+    component: () => import('@/views/PostDetailView.vue')
     //帖子的路由
   },
   {
@@ -58,10 +58,13 @@ const routes = [
     //创建社区的路由
   },
   {
-    path: '/:pathMatch(.*)*',
+    path: '/404',
     name: 'NotFound',
     component: () => import('@/views/NotFound.vue')
-    //404
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: { name: 'NotFound' }
   }
 ]
 
