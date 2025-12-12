@@ -9,7 +9,7 @@
     <div v-else-if="post" class="post-content-card">
 
       <p class="community-link">
-        <router-link :to="`/community/${post.community}`">
+        <router-link :to="`/communities/${post.communityId}`">
           <i class="fas fa-chevron-left"></i> 返回社区
         </router-link>
       </p>
@@ -48,32 +48,14 @@
         </div>
 
         <div v-else class="comments-list">
-          <div
-            v-for="comment in comments"
+          <comment-item
+            v-for="comment in commentTree"
             :key="comment.commentId"
-            class="comment-item"
-          >
-            <div class="comment-header">
-              <p class="comment-author">
-                {{ comment.authorName || "匿名用户" }}
-              </p>
-              <small class="comment-time">时间：{{ comment.time }}</small>
-            </div>
-            
-
-            <p class="comment-text">{{ comment.content }}</p>
-
-            <div class="comment-actions">
-              <button @click="likeComment(comment.commentId)">
-                👍 点赞 {{ comment.upvote || 0 }}
-              </button>
-              <button @click="openReplyModal('comment', comment.commentId, comment.authorName)">
-                💬 回复
-              </button>
-            </div>
-
-            <hr />
-          </div>
+            :comment="comment"
+            :depth="0"
+            @like="likeComment"
+            @reply="openReplyModal"
+          />
         </div>
       </div>
     </div>
@@ -84,40 +66,41 @@
     </div>
 
     <div v-if="showReplyModal" class="modal-overlay" @click.self="closeReplyModal">
-        <div class="modal-content">
-            <h3>{{ replyModalTitle }}</h3>
+      <div class="modal-content">
+        <h3>{{ replyModalTitle }}</h3>
 
-            <div class="form-group">
-                <label for="reply-content">回复内容</label>
-                <textarea 
-                    id="reply-content"
-                    v-model="replyContent"
-                    rows="5" 
-                    placeholder="请输入您的回复..."
-                ></textarea>
-            </div>
-
-            <div class="modal-actions">
-                <button class="btn cancel" @click="closeReplyModal">取消</button>
-                <button class="btn primary-btn" @click="submitReply" :disabled="!replyContent.trim()">
-                    {{ isSubmitting ? '发送中...' : '确认回复' }}
-                </button>
-            </div>
+        <div class="form-group">
+          <label for="reply-content">回复内容</label>
+          <textarea id="reply-content" v-model="replyContent" rows="5" placeholder="请输入您的回复..."></textarea>
         </div>
+
+        <div class="modal-actions">
+          <button class="btn cancel" @click="closeReplyModal">取消</button>
+          <button class="btn primary-btn" @click="submitReply" :disabled="!replyContent.trim()">
+            {{ isSubmitting ? '发送中...' : '确认回复' }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
 import api from "@/api";
+import CommentItem from '@/components/CommentItem.vue';
 
 export default {
   name: "PostDetailView",
+
+  components: {
+    CommentItem
+  },
 
   data() {
     return {
       post: null,
       comments: [],
+      commentTree: [], // 树形结构的评论
       isLoading: true,
       
       // --- 新增：回复弹窗状态 ---
@@ -154,31 +137,72 @@ export default {
       this.$router.push("/home");
     },
 
-    // ... (fetchPostDetail 保持不变) ...
     async fetchPostDetail() {
       this.isLoading = true;
       const id = this.$route.params.id;
       try {
         const res = await api.get(`/api/posts/${id}`);
         this.post = res.data.post;
-        // 确保 comments 字段存在且是数组
-        this.comments = res.data.comments || []; 
+        this.comments = res.data.comments || [];
+
+        // 为每个评论获取点赞数
+        const upvotePromises = this.comments.map(comment => 
+          api.get(`/api/upvokes/count/${comment.commentId}`)
+            .then(res => {
+              comment.upvote = res.data.count; // 将点赞数赋值给评论的upvote属性
+            })
+            .catch(error => {
+              console.error(`获取评论${comment.commentId}点赞数失败:`, error);
+              comment.upvote = 0; // 失败时设为0
+            })
+        );
+
+        await Promise.all(upvotePromises);
+
+        // 构建评论树
+        this.buildCommentTree();
+
       } catch (error) {
         console.error("加载失败:", error);
         this.post = null;
         this.comments = [];
+        this.commentTree = [];
       }
       this.isLoading = false;
     },
 
+    buildCommentTree() {
+      // 创建评论映射
+      const commentMap = {};
+      this.comments.forEach(comment => {
+        commentMap[comment.commentId] = { ...comment, replies: [] };
+      });
 
-    // --- 弹窗逻辑 ---
+      // 构建树
+      const tree = [];
+      this.comments.forEach(comment => {
+        if (comment.fatherId === 0) {
+          tree.push(commentMap[comment.commentId]);
+        } else {
+          const parent = commentMap[comment.fatherId];
+          if (parent) {
+            parent.replies.push(commentMap[comment.commentId]);
+          } else {
+            // 如果父评论不存在，则作为顶级评论
+            tree.push(commentMap[comment.commentId]);
+          }
+        }
+      });
+
+      this.commentTree = tree;
+    },
+
     openReplyModal(type, id, authorName = '') {
       // 1. 设置目标
       this.targetType = type;
       this.targetId = id;
       this.targetAuthor = authorName;
-      
+
       // 2. 重置内容并显示弹窗
       this.replyContent = '';
       this.showReplyModal = true;
@@ -188,372 +212,330 @@ export default {
       this.showReplyModal = false;
     },
 
-    // --- 提交回复逻辑 ---
     async submitReply() {
-      const content = this.replyContent.trim();
-      if (!content) return alert("回复内容不能为空");
+  const content = this.replyContent.trim();
+  if (!content) return alert("回复内容不能为空");
 
-      this.isSubmitting = true;
+  this.isSubmitting = true;
 
-      // 准备发送到后端的数据
-      let payload = {
-        content: content,
-        authorId: 'CURRENT_USER_ID', // 替换为真实的当前用户ID
-        postId: this.post.postId,
-      };
+  const user = this.$store.state.user;
+  if (!user || !user.userId) {
+    alert("请先登录");
+    this.isSubmitting = false;
+    return;
+  }
 
-      if (this.targetType === 'comment') {
-        // 如果是回复评论，需要传入被回复的评论ID
-        payload.parentCommentId = this.targetId;
-      }
+  const authorId = user.userId;
 
+  let payload;
+  let endpoint;
+
+  if (this.targetType === "post") {
+    // 回复帖子
+    endpoint = "/api/comments/createNewCommentOnPost";
+    payload = {
+      postId: this.post.postId,
+      content,
+      authorId
+    };
+  } else if (this.targetType === "comment") {
+    // 回复评论
+    endpoint = "/api/comments/createNewCommentOnComment";
+    payload = {
+      fatherId: this.targetId,
+      postId: this.post.postId,
+      content,
+      authorId
+    };
+  }
+
+  try {
+    await api.post(endpoint, payload);
+
+    alert("回复成功！");
+    this.closeReplyModal();
+
+    // 刷新评论
+    await this.fetchPostDetail();
+  } catch (error) {
+    console.error("回复失败:", error);
+    alert("回复失败：" + (error.response?.data?.message || "网络错误"));
+  } finally {
+    this.isSubmitting = false;
+  }
+},
+
+    async likeComment(commentId) {
       try {
-        // 根据目标类型选择 API 接口 (假设你的后端是这样设计的)
-        const endpoint = this.targetType === 'post' 
-                         ? '/api/comments/add' 
-                         : '/api/comments/reply'; 
-                         
-        await api.post(endpoint, payload);
-        
-        alert("回复成功！");
-        this.closeReplyModal();
-        
-        // 刷新评论列表 (简单粗暴，生产环境建议局部更新)
-        await this.fetchPostDetail(); 
+        const user = this.$store.state.user;
 
+        if (!user || !user.userId) {
+          alert("请先登录");
+          return;
+        }
+
+        const userId = user.userId;   // ⭐ 正确字段
+
+        const response = await api.post('/api/upvokes/upvoke', {
+          commentId,
+          userId
+        });
+
+        if (response.data.success) {
+          const comment = this.comments.find(c => c.commentId === commentId);
+          if (comment) {
+            comment.upvote = (comment.upvote || 0) + 1;
+          }
+        } else {
+          alert(response.data.detail || "点赞失败");
+        }
       } catch (error) {
-        alert("回复失败：" + (error.response?.data?.message || '网络错误'));
-      } finally {
-        this.isSubmitting = false;
+        console.error("点赞失败:", error);
+        alert(error.response?.data?.detail || "点赞失败，请重试");
       }
-    },
-    
-    // --- 其他操作保持不变 ---
-    likeComment(commentId) {
-      // 实际应调用 API 更新点赞数
-      alert("点赞评论：" + commentId);
     }
   },
 };
 </script>
 
-
-
 <style scoped>
-.back-home-btn {
-  margin-bottom: 15px;
-  background: #3498db;
-  color: white;
-  padding: 10px 16px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
 .post-detail-container {
   width: 80%;
-  max-width: 900px;
   margin: 30px auto;
   padding: 0 20px;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 }
 
-.loading-state {
-    text-align: center;
-    padding: 50px;
-    font-size: 1.2rem;
+.back-home-btn {
+  background: #95a5a6;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: 0.2s ease;
+  margin-bottom: 20px;
 }
 
+.back-home-btn:hover {
+  background: #7f8c8d;
+}
+
+/* 加载状态 & 错误状态保持一致 */
+.loading-state,
 .error-state {
-    text-align: center;
-    padding: 50px;
+  text-align: center;
+  padding: 50px;
+  font-size: 1.1rem;
+  color: #7f8c8d;
 }
 
+/* ===== 详情卡片 ===== */
 .post-content-card {
   background: white;
-  padding: 40px;
-  border-radius: 12px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  margin-bottom: 30px;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.community-link {
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+  color: #7f8c8d;
 }
 
 .community-link a {
   color: #3498db;
   text-decoration: none;
   font-weight: 600;
-  font-size: 0.9em;
-  margin-bottom: 20px;
-  display: inline-block;
+}
+.community-link a:hover {
+  text-decoration: underline;
 }
 
-h1 {
-  font-size: 2.5rem;
+.post-content-card h1 {
+  font-size: 2rem;
   color: #2c3e50;
   margin-bottom: 10px;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 10px;
 }
 
 .post-meta-top {
-  color: #7f8c8d;
   font-size: 0.9rem;
-  margin-bottom: 25px;
+  color: #7f8c8d;
+  margin-bottom: 20px;
   display: flex;
-  gap: 15px;
+  gap: 10px;
 }
 
-.post-body p {
-  line-height: 1.8;
-  color: #34495e;
-  font-size: 1.1rem;
-  margin-bottom: 40px;
+/* ===== 正文内容 ===== */
+.post-body {
+  font-size: 1rem;
+  line-height: 1.7;
+  color: #2c3e50;
+  margin-bottom: 25px;
 }
 
+/* ===== 底部：点赞 / 评论按钮 ===== */
 .post-footer {
   display: flex;
   align-items: center;
   gap: 25px;
   border-top: 1px solid #eee;
-  padding-top: 15px;
-  margin-bottom: 30px; /* 调整与评论区的间距 */
+  padding-top: 20px;
 }
 
 .votes {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  color: #7f8c8d;
   font-weight: bold;
-  color: #7f8c8d;
-}
-
-.votes i {
   cursor: pointer;
-  padding: 5px;
 }
 
+.upvote,
+.downvote {
+  font-size: 1.3rem;
+  cursor: pointer;
+}
 .upvote:hover {
-  color: #e74c3c; /* 红色 */
+  color: #e67e22;
 }
-
 .downvote:hover {
-  color: #3498db; /* 蓝色 */
-}
-.comments {
   color: #3498db;
-  font-weight: 600;
-}
-
-/* 新增评论区样式 */
-.comments-section {
-  margin-top: 40px;
-  padding-top: 20px;
-}
-
-.comments-section h2 {
-  font-size: 1.5rem;
-  color: #2c3e50;
-  border-bottom: 2px solid #3498db;
-  padding-bottom: 5px;
-  margin-bottom: 25px;
-}
-
-.no-comments {
-  text-align: center;
-  padding: 30px;
-  color: #7f8c8d;
-  background: #f8f8f8;
-  border-radius: 8px;
-}
-.back-home-btn {
-  margin-bottom: 15px;
-  background: #3498db;
-  color: white;
-  padding: 10px 16px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
 }
 
 .reply-btn {
   background: #2ecc71;
-  border: none;
   color: white;
-  padding: 6px 12px;
-  border-radius: 6px;
+  padding: 8px 16px;
+  border-radius: 5px;
+  border: none;
+  font-size: 0.95rem;
   cursor: pointer;
+  transition: 0.2s ease;
 }
 
 .reply-btn:hover {
-  opacity: 0.9;
+  background: #27ae60;
 }
 
-.comment-item {
-  margin-bottom: 20px;
+.comments {
+  margin-left: auto;
+  color: #7f8c8d;
+  font-size: 0.95rem;
 }
 
-.comment-actions button {
-  margin-right: 10px;
-  padding: 5px 10px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  background: #f0f0f0;
+/* ===== 评论区 ===== */
+.comments-section {
+  background: white;
+  padding: 25px;
+  border-radius: 8px;
+  margin-top: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
 }
 
-.comment-actions button:hover {
-  background: #e2e2e2;
+.no-comments {
+  text-align: center;
+  padding: 20px;
+  color: #7f8c8d;
 }
 
-
-/* 优化：社区返回链接 */
-.community-link a {
-  color: #3498db;
-  text-decoration: none;
-  font-weight: 600;
-  font-size: 0.9em;
-  margin-bottom: 20px;
-  display: inline-block;
-}
-.community-link i {
-  margin-right: 5px;
-}
-
-/* 优化：主贴作者加粗 */
-.post-meta-top span:first-child {
-    font-weight: bold;
-    color: #34495e;
-}
-
-/* 优化：回复按钮颜色 */
-.reply-btn {
-  background: #3498db; /* 使用蓝色更协调 */
-  border: none;
-  color: white;
-  padding: 8px 15px; /* 稍微大一点 */
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.reply-btn:hover {
-  background: #2980b9;
-}
-
-/* 优化：评论头部样式 */
-.comment-header {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-bottom: 5px;
-}
-
-.comment-author {
-  font-weight: bold;
-  color: #2c3e50;
-  margin: 0;
-}
-
-.comment-time {
-  color: #95a5a6;
-  font-size: 0.8em;
-}
-
-.comment-text {
-  line-height: 1.5;
-  margin: 8px 0;
-}
-
-.comment-actions button {
-  /* 优化按钮风格 */
-  background: #f0f3f7;
-  color: #555;
-  border: 1px solid #e0e0e0;
-}
-
-.comment-actions button:hover {
-  background: #e2e2e2;
-}
-
-/* ================= 新增 CSS：回复弹窗样式 ================= */
-
-/* 遮罩层 */
+/* ===== 评论弹窗（与发帖弹窗保持相同风格） ===== */
 .modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.5); 
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
+  z-index: 999;
 }
 
-/* 弹窗主体 */
 .modal-content {
   background: white;
-  padding: 25px;
-  border-radius: 10px;
-  width: 500px;
-  max-width: 90%;
-  box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+  padding: 30px;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 600px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  animation: fadeIn 0.4s ease-out;
 }
 
-.modal-content h3 {
+.modal-content h2 {
   margin-top: 0;
-  margin-bottom: 20px;
-  color: #333;
+  color: #2c3e50;
   border-bottom: 1px solid #eee;
-  padding-bottom: 10px;
+  padding-bottom: 15px;
 }
 
-/* 表单组 */
 .form-group {
+  margin-top: 15px;
   margin-bottom: 20px;
 }
 
 .form-group label {
   display: block;
-  margin-bottom: 8px;
   font-weight: bold;
-  font-size: 0.9em;
-  color: #555;
+  color: #2c3e50;
+  margin-bottom: 8px;
 }
 
-/* 文本域样式 */
-.form-group textarea {
+textarea {
   width: 100%;
-  padding: 10px;
-  border: 1px solid #ddd;
+  padding: 12px;
   border-radius: 5px;
-  box-sizing: border-box; 
-  outline: none;
-  font-size: 1.0em;
-  resize: vertical; /* 允许垂直拖动大小 */
+  border: 1px solid #ddd;
+  resize: vertical;
+  font-size: 1rem;
 }
 
-/* 底部按钮区域 */
 .modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
+  gap: 15px;
+  margin-top: 10px;
 }
 
-.btn.primary-btn {
-  background: #3498db;
-  color: white;
-  padding: 10px 15px;
-}
-.btn.primary-btn:disabled {
-    background: #bdc3c7;
-    cursor: not-allowed;
+.btn {
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: none;
+  transition: background 0.2s;
 }
 
 .btn.cancel {
-  background: #ecf0f1;
-  color: #34495e;
-  border: 1px solid #ccc;
-  padding: 10px 15px;
+  background: #95a5a6;
+  color: white;
+}
+.btn.cancel:hover {
+  background: #7f8c8d;
 }
 
+.primary-btn {
+  background: #3498db;
+  color: white;
+}
+.primary-btn:hover {
+  background: #2980b9;
+}
+
+/* ===== 动画 ===== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 </style>

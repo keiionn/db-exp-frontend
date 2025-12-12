@@ -2,57 +2,48 @@
   <div class="register-container">
     <div class="register-card">
       <div class="register-header">
-        <h1>创建新账户</h1>
-        <p>请填写以下信息注册</p>
+        <h1>创建账户</h1>
+        <p>填写信息完成注册</p>
       </div>
-      
+
       <form @submit.prevent="handleRegister">
+        <!-- 用户名 -->
         <div class="input-group">
           <label>用户名</label>
-          <input 
-            type="text" 
-            v-model="form.username"
-            required
-          >
+          <input type="text" v-model="form.username" required />
         </div>
-        
+
+        <!-- 邮箱 -->
         <div class="input-group">
           <label>邮箱</label>
-          <input 
-            type="email" 
-            v-model="form.email"
-            required
-          >
+          <input type="email" v-model="form.email" required />
         </div>
-        
+
+        <!-- 密码 -->
         <div class="input-group">
           <label>密码</label>
-          <input 
-            type="password" 
-            v-model="form.password"
-            required
-          >
+          <input type="password" v-model="form.password" required />
         </div>
-        
+
+        <!-- 确认密码 -->
         <div class="input-group">
           <label>确认密码</label>
-          <input 
-            type="password" 
-            v-model="form.confirmPassword"
-            required
-          >
+          <input type="password" v-model="form.confirmPassword" required />
         </div>
-        
-        <button 
-          type="submit" 
-          class="register-button"
-          :disabled="isLoading"
-        >
-          {{ isLoading ? '注册中...' : '注册' }}
+
+        <!-- 错误信息 -->
+        <div v-if="errorMessage" class="error-message">
+          {{ errorMessage }}
+        </div>
+
+        <!-- 注册按钮 -->
+        <button type="submit" class="register-button" :disabled="isLoading">
+          {{ isLoading ? "注册中..." : "立即注册" }}
         </button>
-        
+
         <div class="login-link">
-          已有账户? <router-link to="/login">立即登录</router-link>
+          已有账户？
+          <router-link to="/login">去登录</router-link>
         </div>
       </form>
     </div>
@@ -60,46 +51,54 @@
 </template>
 
 <script>
+import axios from "axios";
+
 export default {
-  name: 'RegisterView',
+  name: "RegisterView",
   data() {
     return {
       form: {
-        username: '',
-        email: '',
-        password: '',
-        confirmPassword: ''
+        username: "",
+        email: "",
+        password: "",
+        confirmPassword: ""
       },
-      isLoading: false
-    }
+      isLoading: false,
+      errorMessage: ""
+    };
   },
   methods: {
     async handleRegister() {
+      this.errorMessage = "";
+
       if (this.form.password !== this.form.confirmPassword) {
-        alert('两次输入的密码不一致')
-        return
+        this.errorMessage = "两次输入的密码不一致";
+        return;
       }
-      
-      this.isLoading = true
-      
+
+      this.isLoading = true;
+
       try {
-        // 调用注册API
-        const response = await this.$axios.post('/api/register', this.form)
-        
-        if (response.data.success) {
-          alert('注册成功!')
-          this.$router.push('/login')
-        } else {
-          alert(response.data.message || '注册失败')
-        }
+        const response = await axios.post(
+          "http://localhost:8081/api/auth/regist",
+          {
+            username: this.form.username,
+            password: this.form.password,
+            email: this.form.email
+          }
+        );
+
+        alert("注册成功！");
+        this.$router.push("/login");
       } catch (error) {
-        alert(error.response?.data?.message || '请求出错，请稍后重试')
+        this.errorMessage =
+          error.response?.data?.detail || "注册失败，请稍后再试";
       } finally {
-        this.isLoading = false
+        this.isLoading = false;
       }
     }
   }
-}
+};
 </script>
 
 <style scoped>
@@ -116,9 +115,9 @@ export default {
   background: rgba(255, 255, 255, 0.95);
   border-radius: 16px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-  padding: 60px 50px;
+  padding: 50px 40px;
   width: 100%;
-  max-width: 800px;
+  max-width: 700px;
 }
 
 .register-header {
@@ -131,66 +130,66 @@ export default {
   margin-bottom: 10px;
 }
 
-.register-header p {
-  color: #7f8c8d;
-}
-
 .input-group {
   margin-bottom: 20px;
 }
 
 label {
+  font-weight: 600;
+  margin-bottom: 6px;
   display: block;
-  margin-bottom: 8px;
-  font-weight: 500;
-  color: #495057;
+  color: #444;
 }
 
 input {
   width: 100%;
-  padding: 16px;
+  padding: 14px;
   border: 1px solid #ced4da;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 16px;
+  transition: 0.2s;
+}
+
+input:focus {
+  border-color: #6a11cb;
+  outline: none;
+}
+
+.error-message {
+  background: #ffe3e3;
+  color: #d63031;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  font-size: 15px;
 }
 
 .register-button {
   background: linear-gradient(to right, #6a11cb, #2575fc);
   color: white;
   border: none;
-  border-radius: 8px;
-  padding: 18px;
+  border-radius: 10px;
+  padding: 16px;
   width: 100%;
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: bold;
   cursor: pointer;
   transition: opacity 0.3s;
-  margin-top: 20px;
 }
 
 .register-button:disabled {
-  opacity: 0.7;
+  opacity: 0.6;
   cursor: not-allowed;
-}
-
-.register-button:hover:not(:disabled) {
-  opacity: 0.9;
 }
 
 .login-link {
   text-align: center;
-  margin-top: 25px;
-  font-size: 16px;
-  color: #666;
+  margin-top: 20px;
+  color: #555;
 }
 
 .login-link a {
   color: #6a11cb;
-  text-decoration: none;
   font-weight: 600;
-}
-
-.login-link a:hover {
-  text-decoration: underline;
 }
 </style>

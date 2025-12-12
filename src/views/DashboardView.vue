@@ -4,7 +4,7 @@
     <router-link to="/home" class="btn position top-right">
       返回首页
     </router-link>
-    
+
     <div class="user-info">
       <p><strong>用户名：</strong> {{ getUserInfo.username }}</p>
       <p v-if="getUserInfo.email"><strong>邮箱：</strong> {{ getUserInfo.email }}</p>
@@ -24,15 +24,27 @@
     <div class="my-communities-section">
       <h2>我的社区</h2>
       <div v-if="usercommunities.length > 0">
-        <div class="community-card" v-for="community in usercommunities" :key="community.communityId" @click="goToCommunity(community)">
+        <div class="community-card" v-for="community in usercommunities" :key="community.communityId"
+          @click="goToCommunity(community)">
           <h3>{{ community.title }}</h3>
-          <p>{{ community.content ? community.content.substring(0, 100) : '' }}...</p>
-          <div class="post-meta">
-            <span class="community-tag">{{ community.communityName }}</span>
-          </div>
+          <p>{{ community.description ? community.description.substring(0, 100) : '' }}...</p>
         </div>
       </div>
       <p v-else class="empty">暂无社区</p>
+    </div>
+
+    <div class="my-communities-section">
+      <h2>我关注的社区</h2>
+      <div v-if="subscribedcommunities.length > 0">
+        <div class="community-card" v-for="community in subscribedcommunities" :key="community.communityId"
+          @click="goToCommunity(community)">
+          <h3>{{ community.title }}</h3>
+          <p class="follow-time">
+            关注时间：{{ (community.createAt) }}
+          </p>
+        </div>
+      </div>
+      <p v-else class="empty">暂无关注的社区</p>
     </div>
 
     <div v-if="showPasswordModal" class="modal-overlay" @click.self="closePasswordModal">
@@ -86,7 +98,6 @@ export default {
 
   computed: {
     getUserInfo() {
-      // 增加空值保护，防止报错
       return this.$store.state.user || {};
     }
   },
@@ -95,12 +106,10 @@ export default {
     return {
       usercommunities: [],
       subscribedcommunities: [],
-      
-      // --- 新增：弹窗控制状态 ---
+
       showPasswordModal: false,
       showEmailModal: false,
 
-      // --- 新增：表单数据 ---
       pwdForm: {
         oldPassword: '',
         newPassword: '',
@@ -114,7 +123,6 @@ export default {
   },
 
   mounted() {
-    // 增加判断，如果有用户ID才请求，防止未登录报错
     if (this.getUserInfo && this.getUserInfo.userId) {
       this.fetchUserPosts();
       this.fetchSubscribedPosts();
@@ -122,7 +130,6 @@ export default {
   },
 
   methods: {
-    // ... (原有的获取数据方法保持不变) ...
     async fetchUserPosts() {
       try {
         const res = await api.get(`/api/communities/myCommunities/${this.getUserInfo.userId}`);
@@ -131,6 +138,7 @@ export default {
         console.error("获取用户创建的社区失败:", err);
       }
     },
+
     async fetchSubscribedPosts() {
       try {
         const res = await api.get(`/api/communities/subscribed/${this.getUserInfo.userId}`);
@@ -139,16 +147,18 @@ export default {
         console.error("获取用户关注的社区失败:", err);
       }
     },
+
     goToCommunity(community) {
       this.$router.push(`/communities/${community.communityId}`);
     },
+
     createCommunity() {
       this.$router.push("/createcommunity");
     },
 
-    // --- 新增：修改密码逻辑 ---
+    // ------------------- 修改密码 -------------------
     openPasswordModal() {
-      this.pwdForm = { oldPassword: '', newPassword: '', confirmPassword: '' }; // 重置表单
+      this.pwdForm = { oldPassword: '', newPassword: '', confirmPassword: '' };
       this.showPasswordModal = true;
     },
     closePasswordModal() {
@@ -157,30 +167,26 @@ export default {
     async submitPasswordChange() {
       const { oldPassword, newPassword, confirmPassword } = this.pwdForm;
 
-      // 1. 本地校验
       if (!oldPassword || !newPassword) return alert("请填写完整信息");
-      if (newPassword !== confirmPassword) return alert("两次输入的密码不一致");
+      if (newPassword !== confirmPassword) return alert("两次输入的新密码不一致");
       if (newPassword.length < 6) return alert("新密码长度不能少于6位");
 
       try {
-        // 2. 发送请求 (请根据你的后端实际接口修改路径)
-        await api.post('/api/user/change-password', {
+        await api.post("http://localhost:8081/api/auth/change_password", {
           userId: this.getUserInfo.userId,
           oldPassword,
           newPassword
         });
-        
-        alert("密码修改成功，请重新登录");
+
+        alert("密码修改成功！");
         this.closePasswordModal();
-        // 可选：退出登录逻辑
-        // this.$store.dispatch('logout');
-        // this.$router.push('/login');
+
       } catch (err) {
-        alert(err.response?.data?.message || "修改密码失败");
+        alert(err.response?.data?.detail || "修改密码失败");
       }
     },
 
-    // --- 新增：修改邮箱逻辑 ---
+    // ------------------- 修改邮箱 -------------------
     openEmailModal() {
       this.emailForm = { newEmail: '', password: '' };
       this.showEmailModal = true;
@@ -188,30 +194,38 @@ export default {
     closeEmailModal() {
       this.showEmailModal = false;
     },
+
     async submitEmailChange() {
       const { newEmail, password } = this.emailForm;
 
-      // 1. 本地校验
-      if (!newEmail || !password) return alert("请填写完整信息");
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(newEmail)) return alert("请输入有效的邮箱格式");
+      if (!newEmail || !password) return alert("请完整填写信息");
 
       try {
-        // 2. 发送请求
-        await api.post('/api/user/change-email', {
+        const res = await api.post("http://localhost:8081/api/auth/change_email", {
           userId: this.getUserInfo.userId,
+          oldEmail: this.getUserInfo.email,
           newEmail,
-          password // 通常修改敏感信息需要验证当前密码
+          password
         });
 
-        alert("邮箱修改成功");
-        // 如果 Vuex 中存了 email，这里最好更新一下 store
-        // this.$store.commit('UPDATE_USER_EMAIL', newEmail);
+        const updatedEmail = res.data.newEmail;
+
+        // ① 更新 Vuex 用户 email
+        this.$store.commit("UPDATE_USER_EMAIL", updatedEmail);
+
+        // ② 更新本地 UI（避免 UI 不刷新）
+        this.getUserInfo.email = updatedEmail;
+
+        // ③ 关闭弹窗
         this.closeEmailModal();
+
+        alert("邮箱修改成功！当前邮箱：" + updatedEmail);
+
       } catch (err) {
-        alert(err.response?.data?.message || "修改邮箱失败");
+        alert(err.response?.data?.detail || "修改邮箱失败");
       }
     }
+
   }
 };
 </script>
@@ -324,17 +338,21 @@ export default {
   color: #777;
   margin-top: 10px;
 }
+
 .modal-overlay {
-  position: fixed; /* 关键：固定在视口 */
+  position: fixed;
+  /* 关键：固定在视口 */
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.5); /* 半透明黑色背景 */
+  background: rgba(0, 0, 0, 0.5);
+  /* 半透明黑色背景 */
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000; /* 确保覆盖页面上的其他元素 */
+  z-index: 1000;
+  /* 确保覆盖页面上的其他元素 */
 }
 
 /* 弹窗主体 */
@@ -344,7 +362,7 @@ export default {
   border-radius: 10px;
   width: 400px;
   max-width: 90%;
-  box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
 }
 
 .modal-content h3 {
@@ -372,7 +390,7 @@ export default {
   padding: 10px;
   border: 1px solid #ddd;
   border-radius: 5px;
-  box-sizing: border-box; 
+  box-sizing: border-box;
   outline: none;
 }
 
@@ -390,6 +408,7 @@ export default {
   border: 1px solid #ddd;
   margin-right: 10px;
 }
+
 .btn.cancel:hover {
   background: #e0e0e0;
 }

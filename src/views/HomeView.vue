@@ -78,7 +78,7 @@ export default {
 
     async fetchCommunities() {
       try {
-        const res = await api.get("/api/communities/getNewCommunities");
+        const res = await api.get("/api/communities/getAllCommunities");
         this.allCommunities = res.data;
       } catch (err) {
         console.error("获取社区失败:", err);
@@ -87,7 +87,7 @@ export default {
 
     goToCommunity(communityId) {
       if (communityId) {
-        this.$router.push(`/community/${communityId}`);
+        this.$router.push(`/communities/${communityId}`);
       } else {
         console.error("无效的 communityId:", communityId);
       }

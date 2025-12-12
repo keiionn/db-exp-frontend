@@ -27,12 +27,49 @@
         <p>创建者: {{ community.authorName }}</p>
 
         <div class="header-actions">
-          <router-link :to="`/community/${community.communityId}/submit`" class="create-post-btn">
+          <button class="create-post-btn" @click="showPostForm = true">
             创建帖子
-          </router-link>
+          </button>
           <router-link to="/home" class="back-home-btn">
             返回首页
           </router-link>
+        </div>
+      </div>
+
+      <!-- 创建帖子表单弹窗 -->
+      <div v-if="showPostForm" class="post-form-modal">
+        <div class="modal-content">
+          <h2>创建新帖子</h2>
+          <form @submit.prevent="handleSubmit">
+            <div class="form-group">
+              <label for="post-title">标题</label>
+              <input
+                type="text"
+                id="post-title"
+                v-model="newPost.title"
+                placeholder="输入帖子标题"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="post-description">内容</label>
+              <textarea
+                id="post-description"
+                v-model="newPost.description"
+                placeholder="输入帖子内容"
+                rows="5"
+                required
+              ></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="cancel-btn" @click="showPostForm = false">
+                取消
+              </button>
+              <button type="submit" class="submit-btn">
+                提交
+              </button>
+            </div>
+          </form>
         </div>
       </div>
 
@@ -54,6 +91,7 @@
               <p>{{ post.description.substring(0, 100) }}...</p>
               <div class="post-meta">
                 <span>💬 {{ post.comments }} 评论</span>
+                <span>作者: {{ post.authorName }}</span>
                 <span>查看详情</span>
               </div>
             </div>
@@ -85,6 +123,11 @@ export default {
       error: false,
       community: null,
       posts: [],
+      showPostForm: false,
+      newPost: {
+        title: '',
+        description: ''
+      },
     };
   },
   watch: {
@@ -95,6 +138,11 @@ export default {
           this.fetchCommunityData();
         }
       }
+    }
+  },
+  computed: {
+    getUserInfo() {
+      return this.$store.state.user || {};
     }
   },
   methods: {
@@ -121,7 +169,43 @@ export default {
       this.fetchCommunityData();
     },
     goToPost(postId) {
-      this.$router.push(`/post/${postId}`);
+      this.$router.push(`/posts/${postId}`);
+    },
+    async createNewPost() {
+      try {
+        const response = await api.post('/api/posts/createNewPost', {
+          title: this.newPost.title,
+          description: this.newPost.description,
+          communityId: this.community.communityId,
+          authorId: this.getUserInfo.userId
+        });
+        
+        console.log('帖子创建成功:', response.data);
+        this.showPostForm = false;
+        this.newPost = { title: '', description: '' };
+        
+        // 刷新帖子列表
+        this.fetchCommunityData();
+        
+        // 跳转到新创建的帖子
+        this.$router.push(`/posts/${response.data.postId}`);
+      } catch (error) {
+        console.error('创建帖子失败:', error);
+        alert('创建帖子失败，请重试');
+      }
+    },
+    handleSubmit() {
+      this.createNewPost();
+    },
+    formatDate(timestamp) {
+      const date = new Date(timestamp);
+      return date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
     },
   },
 };
@@ -291,6 +375,96 @@ export default {
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
+/* 帖子表单弹窗样式 */
+.post-form-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  padding: 30px;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 600px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.modal-content h2 {
+  margin-top: 0;
+  color: #2c3e50;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 15px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.form-group textarea {
+  resize: vertical;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.cancel-btn {
+  background: #95a5a6;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.cancel-btn:hover {
+  background: #7f8c8d;
+}
+
+.submit-btn {
+  background: #2ecc71;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.submit-btn:hover {
+  background: #27ae60;
+}
+
 .votes {
   display: flex;
   flex-direction: column;
@@ -310,7 +484,8 @@ export default {
   display: flex;
   gap: 15px;
   color: #7f8c8d;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   margin-top: 10px;
+  flex-wrap: wrap;
 }
 </style>

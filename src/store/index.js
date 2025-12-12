@@ -13,6 +13,9 @@ export default createStore({
       } else {
         localStorage.removeItem("user")
       }
+    },
+    UPDATE_USER_EMAIL(state, newEmail) {
+      state.user.email = newEmail;
     }
   },
 

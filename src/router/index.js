@@ -39,13 +39,13 @@ const routes = [
     //个人主页的路由
   },
   {
-    path: '/community/:id',
+    path: '/communities/:id',
     name: 'CommunityDetail',
     component: () => import('@/views/CommunityDetailView.vue')
     // 社区详情路由
   },
   {
-    path: '/post/:id',
+    path: '/posts/:id',
     name: 'PostDetail',
     component: () => import('@/views/PostDetailView.vue')
     //帖子的路由
