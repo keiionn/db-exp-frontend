@@ -2,12 +2,9 @@
   <div class="post-detail-container">
     <button class="back-home-btn" @click="goHome">返回首页</button>
 
-    <div v-if="isLoading" class="loading-state">
-      正在加载帖子信息...
-    </div>
+    <div v-if="isLoading" class="loading-state">正在加载帖子信息...</div>
 
     <div v-else-if="post" class="post-content-card">
-
       <p class="community-link">
         <router-link :to="`/communities/${post.communityId}`">
           <i class="fas fa-chevron-left"></i> 返回社区
@@ -15,13 +12,11 @@
       </p>
 
       <h1>{{ post.title }}</h1>
-
       <div class="post-meta-top">
         <span>作者: {{ post.authorName }}</span>
         <span>•</span>
-        <span>发布于: Mock 时间</span>
+        <span>发布于: {{ formatDate(post.createdAt) }}</span>
       </div>
-
       <div class="post-body">
         <p>{{ post.description }}</p>
       </div>
@@ -29,11 +24,11 @@
       <div class="post-footer">
         <div class="votes">
           <i class="fas fa-arrow-up upvote"></i>
-          <span>{{ post.upvokes }}</span>
+          <span>0</span>
           <i class="fas fa-arrow-down downvote"></i>
         </div>
 
-        <button class="reply-btn" @click="openReplyModal('post', post.postId)">
+        <button class="reply-btn" @click="openReplyModal('post', post.postId, post.authorName)">
           💬 回复帖子
         </button>
 
@@ -42,19 +37,19 @@
 
       <div class="comments-section">
         <h2>全部评论 ({{ comments.length }})</h2>
-
         <div v-if="comments.length === 0" class="no-comments">
           <p>还没有评论，快来发表你的看法吧！</p>
         </div>
-
         <div v-else class="comments-list">
           <comment-item
             v-for="comment in commentTree"
             :key="comment.commentId"
             :comment="comment"
             :depth="0"
-            @like="likeComment"
+            :currentUserId="currentUserId"
             @reply="openReplyModal"
+            @delete="handleDeleteComment"
+            @edit="handleEditComment"
           />
         </div>
       </div>
@@ -68,26 +63,43 @@
     <div v-if="showReplyModal" class="modal-overlay" @click.self="closeReplyModal">
       <div class="modal-content">
         <h3>{{ replyModalTitle }}</h3>
-
         <div class="form-group">
           <label for="reply-content">回复内容</label>
           <textarea id="reply-content" v-model="replyContent" rows="5" placeholder="请输入您的回复..."></textarea>
         </div>
-
         <div class="modal-actions">
           <button class="btn cancel" @click="closeReplyModal">取消</button>
-          <button class="btn primary-btn" @click="submitReply" :disabled="!replyContent.trim()">
+          <button class="btn primary-btn" @click="submitReply" :disabled="!replyContent.trim() || isSubmitting">
             {{ isSubmitting ? '发送中...' : '确认回复' }}
           </button>
         </div>
       </div>
     </div>
+
+    <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
+        <div class="modal-content">
+            <h3>修改评论</h3>
+            <div class="form-group">
+                <label for="edit-content">新内容</label>
+                <textarea id="edit-content" v-model="editContent" rows="5" placeholder="请输入修改后的评论内容..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="btn cancel" @click="closeEditModal">取消</button>
+                <button class="btn primary-btn" @click="submitEdit" :disabled="!editContent.trim() || isSubmitting">
+                    {{ isSubmitting ? '保存中...' : '确认修改' }}
+                </button>
+            </div>
+        </div>
+    </div>
   </div>
 </template>
 
 <script>
-import api from "@/api";
+import api, { postsAPI, commentsAPI, usersAPI } from "@/api/index"; 
 import CommentItem from '@/components/CommentItem.vue';
+import { mapGetters } from 'vuex'; 
+
+const COMMENTS_BY_POST_API = '/comments/post';
 
 export default {
   name: "PostDetailView",
@@ -100,20 +112,21 @@ export default {
     return {
       post: null,
       comments: [],
-      commentTree: [], // 树形结构的评论
+      commentTree: [], 
       isLoading: true,
-      
-      // --- 新增：回复弹窗状态 ---
-      showReplyModal: false,
       isSubmitting: false,
       
-      // 回复目标信息
+      // 回复状态
+      showReplyModal: false,
       targetType: '',       // 'post' 或 'comment'
       targetId: null,       // 帖子ID 或 评论ID
-      targetAuthor: '',     // 被回复的作者名称（用于显示在标题中）
-      
-      // 回复内容
-      replyContent: ''
+      targetAuthor: '',     // 被回复的作者名称
+      replyContent: '',
+
+      // 编辑状态
+      showEditModal: false,
+      editContent: '',
+      editingCommentId: null, // 当前正在编辑的评论 ID
     };
   },
 
@@ -122,7 +135,15 @@ export default {
   },
 
   computed: {
+    ...mapGetters(['getUserId']), 
+    currentUserId() {
+        // 确保从 Store 获取的 ID 是数字类型，用于严格比较
+        const id = this.getUserId;
+        return id ? parseInt(id, 10) : null; 
+    },
+    
     replyModalTitle() {
+      if (!this.post) return '发表回复';
       if (this.targetType === 'post') {
         return `回复帖子：${this.post.title.substring(0, 15)}...`;
       } else if (this.targetType === 'comment') {
@@ -139,27 +160,50 @@ export default {
 
     async fetchPostDetail() {
       this.isLoading = true;
-      const id = this.$route.params.id;
+      const postId = this.$route.params.id;
+      
       try {
-        const res = await api.get(`/api/posts/${id}`);
-        this.post = res.data.post;
-        this.comments = res.data.comments || [];
+        // 1. 获取帖子详情
+        const postResponse = await postsAPI.getPost(postId);
+        const postData = postResponse.data;
 
-        // 为每个评论获取点赞数
-        const upvotePromises = this.comments.map(comment => 
-          api.get(`/api/upvokes/count/${comment.commentId}`)
-            .then(res => {
-              comment.upvote = res.data.count; // 将点赞数赋值给评论的upvote属性
-            })
-            .catch(error => {
-              console.error(`获取评论${comment.commentId}点赞数失败:`, error);
-              comment.upvote = 0; // 失败时设为0
-            })
+        // 2. 获取评论列表
+        const commentsResponse = await api.get(`${COMMENTS_BY_POST_API}/${postId}`);
+        let commentsData = commentsResponse.data || [];
+        
+        // 3. 批量获取作者用户名 (简化处理)
+        const userIds = new Set([postData.userId, ...commentsData.map(c => c.userId)].filter(id => id !== undefined && id !== null));
+
+        const userPromises = Array.from(userIds).map(id => 
+            usersAPI.getUser(id) 
+               .then(res => ({ userId: id, username: res.data.username || '未知用户' }))
+               .catch(() => ({ userId: id, username: '未知用户' }))
         );
+        const users = await Promise.all(userPromises);
+        const userMap = new Map(users.map(u => [u.userId, u.username]));
 
-        await Promise.all(upvotePromises);
+        // 4. 映射帖子数据
+        this.post = {
+            postId: postData.postId,
+            communityId: postData.communityId,
+            title: postData.postTitle, 
+            description: postData.postContent, 
+            createdAt: postData.createdAt,
+            authorName: userMap.get(postData.userId) || '未知用户',
+            userId: postData.userId, // 关键：帖子作者 ID
+        };
 
-        // 构建评论树
+        // 5. 映射评论数据
+        this.comments = commentsData.map(c => ({
+            commentId: c.commentId,
+            content: c.content,
+            userId: c.userId, // 关键：评论作者 ID
+            postId: c.postId,
+            parentCommentId: c.parentCommentId, 
+            createdAt: c.createdAt,
+            authorName: userMap.get(c.userId) || '未知用户',
+        }));
+
         this.buildCommentTree();
 
       } catch (error) {
@@ -167,28 +211,26 @@ export default {
         this.post = null;
         this.comments = [];
         this.commentTree = [];
+      } finally {
+        this.isLoading = false;
       }
-      this.isLoading = false;
     },
 
     buildCommentTree() {
-      // 创建评论映射
       const commentMap = {};
       this.comments.forEach(comment => {
         commentMap[comment.commentId] = { ...comment, replies: [] };
       });
 
-      // 构建树
       const tree = [];
       this.comments.forEach(comment => {
-        if (comment.fatherId === 0) {
+        if (comment.parentCommentId === null || comment.parentCommentId === 0) {
           tree.push(commentMap[comment.commentId]);
         } else {
-          const parent = commentMap[comment.fatherId];
+          const parent = commentMap[comment.parentCommentId];
           if (parent) {
             parent.replies.push(commentMap[comment.commentId]);
           } else {
-            // 如果父评论不存在，则作为顶级评论
             tree.push(commentMap[comment.commentId]);
           }
         }
@@ -197,13 +239,11 @@ export default {
       this.commentTree = tree;
     },
 
+    // --- 回复逻辑 ---
     openReplyModal(type, id, authorName = '') {
-      // 1. 设置目标
       this.targetType = type;
       this.targetId = id;
       this.targetAuthor = authorName;
-
-      // 2. 重置内容并显示弹窗
       this.replyContent = '';
       this.showReplyModal = true;
     },
@@ -213,86 +253,123 @@ export default {
     },
 
     async submitReply() {
-  const content = this.replyContent.trim();
-  if (!content) return alert("回复内容不能为空");
+      const content = this.replyContent.trim();
+      if (!content) return alert("回复内容不能为空");
 
-  this.isSubmitting = true;
+      this.isSubmitting = true;
 
-  const user = this.$store.state.user;
-  if (!user || !user.userId) {
-    alert("请先登录");
-    this.isSubmitting = false;
-    return;
-  }
-
-  const authorId = user.userId;
-
-  let payload;
-  let endpoint;
-
-  if (this.targetType === "post") {
-    // 回复帖子
-    endpoint = "/api/comments/createNewCommentOnPost";
-    payload = {
-      postId: this.post.postId,
-      content,
-      authorId
-    };
-  } else if (this.targetType === "comment") {
-    // 回复评论
-    endpoint = "/api/comments/createNewCommentOnComment";
-    payload = {
-      fatherId: this.targetId,
-      postId: this.post.postId,
-      content,
-      authorId
-    };
-  }
-
-  try {
-    await api.post(endpoint, payload);
-
-    alert("回复成功！");
-    this.closeReplyModal();
-
-    // 刷新评论
-    await this.fetchPostDetail();
-  } catch (error) {
-    console.error("回复失败:", error);
-    alert("回复失败：" + (error.response?.data?.message || "网络错误"));
-  } finally {
-    this.isSubmitting = false;
-  }
-},
-
-    async likeComment(commentId) {
+      let payload = {
+        postId: this.post.postId,
+        content: content,
+        // 回复帖子时 parentCommentId 为 null
+        parentCommentId: this.targetType === "comment" ? this.targetId : null
+      };
+      
       try {
-        const user = this.$store.state.user;
-
-        if (!user || !user.userId) {
-          alert("请先登录");
-          return;
-        }
-
-        const userId = user.userId;   // ⭐ 正确字段
-
-        const response = await api.post('/api/upvokes/upvoke', {
-          commentId,
-          userId
-        });
-
-        if (response.data.success) {
-          const comment = this.comments.find(c => c.commentId === commentId);
-          if (comment) {
-            comment.upvote = (comment.upvote || 0) + 1;
-          }
-        } else {
-          alert(response.data.detail || "点赞失败");
-        }
+        await commentsAPI.createComment(payload);
+        alert("回复成功！");
+        this.closeReplyModal();
+        await this.fetchPostDetail();
       } catch (error) {
-        console.error("点赞失败:", error);
-        alert(error.response?.data?.detail || "点赞失败，请重试");
+        console.error("回复失败:", error);
+        let errorMessage = "回复失败：请检查是否登录或输入是否符合要求。";
+        if (error.response?.status === 401) {
+              errorMessage = '回复需要登录。请先登录您的账户！';
+        } else if (error.response?.data?.message) {
+              errorMessage = `回复失败: ${error.response.data.message}`;
+        }
+        alert(errorMessage);
+      } finally {
+        this.isSubmitting = false;
       }
+    },
+    
+    // --- 删除逻辑 ---
+    handleDeleteComment(commentId) {
+      if (confirm(`确定要删除此评论 (ID: ${commentId}) 及其所有回复吗？此操作不可逆！`)) {
+        this.deleteComment(commentId);
+      }
+    },
+
+    async deleteComment(commentId) {
+      try {
+        await commentsAPI.deleteComment(commentId);
+        alert("评论删除成功！");
+        await this.fetchPostDetail();
+      } catch (error) {
+        console.error("删除评论失败:", error);
+        let errorMessage = "删除评论失败：请检查您是否拥有权限或评论是否已被删除。";
+        if (error.response?.status === 401) {
+             errorMessage = '删除操作需要登录。请先登录您的账户！';
+        } else if (error.response?.status === 403) {
+             errorMessage = '您没有权限删除此评论（非作者或管理员）。';
+        } else if (error.response?.data?.message) {
+             errorMessage = `删除失败: ${error.response.data.message}`;
+        }
+        alert(errorMessage);
+      }
+    },
+
+    // --- 修改逻辑 ---
+    handleEditComment(commentId, content) {
+      this.editingCommentId = commentId;
+      this.editContent = content; // 填充当前内容
+      this.showEditModal = true;
+    },
+
+    closeEditModal() {
+      this.showEditModal = false;
+      this.editContent = '';
+      this.editingCommentId = null;
+    },
+    
+    async submitEdit() {
+      const content = this.editContent.trim();
+      const commentId = this.editingCommentId;
+      
+      if (!content || !commentId) return alert("评论内容或ID无效。");
+      
+      // 简单检查内容是否修改，如果找到原评论
+      const originalComment = this.comments.find(c => c.commentId === commentId);
+      if (originalComment && content === originalComment.content) {
+          return alert("评论内容没有改变。");
+      }
+
+      this.isSubmitting = true;
+
+      try {
+        // 调用修改 API
+        await commentsAPI.updateComment(commentId, content);
+
+        alert("评论修改成功！");
+        this.closeEditModal();
+        await this.fetchPostDetail();
+      } catch (error) {
+        console.error("修改评论失败:", error);
+        let errorMessage = "修改评论失败：请检查是否登录或权限。";
+        if (error.response?.status === 401) {
+              errorMessage = '修改操作需要登录。请先登录您的账户！';
+        } else if (error.response?.status === 403) {
+             errorMessage = '您没有权限修改此评论（非作者）。';
+        } else if (error.response?.data?.message) {
+              errorMessage = `修改失败: ${error.response.data.message}`;
+        }
+        alert(errorMessage);
+      } finally {
+        this.isSubmitting = false;
+      }
+    },
+
+    formatDate(timestamp) {
+        if (!timestamp) return '未知时间';
+        const date = new Date(timestamp);
+        return date.toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     }
   },
 };
@@ -322,7 +399,6 @@ export default {
   background: #7f8c8d;
 }
 
-/* 加载状态 & 错误状态保持一致 */
 .loading-state,
 .error-state {
   text-align: center;
@@ -331,7 +407,6 @@ export default {
   color: #7f8c8d;
 }
 
-/* ===== 详情卡片 ===== */
 .post-content-card {
   background: white;
   padding: 30px;
@@ -370,7 +445,6 @@ export default {
   gap: 10px;
 }
 
-/* ===== 正文内容 ===== */
 .post-body {
   font-size: 1rem;
   line-height: 1.7;
@@ -378,7 +452,6 @@ export default {
   margin-bottom: 25px;
 }
 
-/* ===== 底部：点赞 / 评论按钮 ===== */
 .post-footer {
   display: flex;
   align-items: center;
@@ -429,7 +502,6 @@ export default {
   font-size: 0.95rem;
 }
 
-/* ===== 评论区 ===== */
 .comments-section {
   background: white;
   padding: 25px;
@@ -444,7 +516,7 @@ export default {
   color: #7f8c8d;
 }
 
-/* ===== 评论弹窗（与发帖弹窗保持相同风格） ===== */
+/* ===== 弹窗 (回复 & 编辑) ===== */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -468,7 +540,7 @@ export default {
   animation: fadeIn 0.4s ease-out;
 }
 
-.modal-content h2 {
+.modal-content h3 {
   margin-top: 0;
   color: #2c3e50;
   border-bottom: 1px solid #eee;
@@ -527,7 +599,6 @@ textarea {
   background: #2980b9;
 }
 
-/* ===== 动画 ===== */
 @keyframes fadeIn {
   from {
     opacity: 0;

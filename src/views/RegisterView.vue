@@ -51,7 +51,7 @@
 </template>
 
 <script>
-import axios from "axios";
+import { usersAPI } from '@/api/index';
 
 export default {
   name: "RegisterView",
@@ -79,14 +79,11 @@ export default {
       this.isLoading = true;
 
       try {
-        const response = await axios.post(
-          "http://localhost:8081/api/auth/regist",
-          {
-            username: this.form.username,
-            password: this.form.password,
-            email: this.form.email
-          }
-        );
+        const response = await usersAPI.createUser({
+          username: this.form.username,
+          email: this.form.email,
+          password: this.form.password
+        });
 
         alert("注册成功！");
         this.$router.push("/login");

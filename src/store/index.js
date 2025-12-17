@@ -1,4 +1,6 @@
 import { createStore } from 'vuex'
+import { authAPI } from '@/api/index'; // 确保 axios 也在文件顶部被导入，虽然您的代码中使用了 axios.post
+import axios from 'axios'; //
 
 export default createStore({
   state: {
@@ -15,18 +17,23 @@ export default createStore({
       }
     },
     UPDATE_USER_EMAIL(state, newEmail) {
-      state.user.email = newEmail;
+      // 确保在更新前 user 对象存在
+      if (state.user) {
+         state.user.email = newEmail;
+      }
     }
   },
 
   actions: {
     async login({ commit }, { username, password }) {
       try {
+        // 注意: 您的 base URL 和端口与 /api/index.js 中不同 (8081 vs 8080)
+        // 建议使用封装的 api 实例，或确保这里的 URL 正确
         const response = await axios.post(
-          "http://localhost:8081/api/auth/login",
+          "http://localhost:8080/api/auth/login", // 假设使用 8080 端口以匹配其他 API
           { username, password },
           {
-            withCredentials: true,   // ⭐ 必须：让浏览器保存 JSESSIONID
+            withCredentials: true,
           }
         );
 
@@ -34,7 +41,7 @@ export default createStore({
         const data = response.data;
 
         const userData = {
-          userId: data.userId,
+          userId: data.userId, // 关键：这个 ID 必须存在
           username: data.username,
           email: data.email,
           message: data.message
@@ -50,8 +57,13 @@ export default createStore({
       }
     },
 
-    logout({ commit }) {
-      commit("setUser", null)
+    async logout({ commit }) {
+      try {
+        await authAPI.logout();
+        commit("setUser", null);
+      } catch (error) {
+        console.error("登出失败:", error);
+      }
     },
     async autoLogin({ commit }) {
       const user = localStorage.getItem("user");
@@ -69,6 +81,13 @@ export default createStore({
   },
 
   getters: {
+    getUserId: state => {
+      // 安全返回 userId，如果用户不存在则返回 null
+      const id = state.user ? state.user.userId : null;
+      // 确保返回的 ID 是数字类型（如果 API 返回的是数字）
+      return id ? parseInt(id, 10) : null; 
+    },
+    
     isAuthenticated: state => !!state.user
   }
 })

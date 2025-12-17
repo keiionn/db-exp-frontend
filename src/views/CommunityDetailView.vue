@@ -1,11 +1,9 @@
 <template>
   <div class="community-detail-container">
-    <!-- 加载中 -->
     <div v-if="isLoading" class="loading-state">
       正在加载社区信息...
     </div>
 
-    <!-- 加载失败 -->
     <div v-else-if="error" class="error-state fade-in">
       <div class="error-box">
         <i class="fas fa-exclamation-circle error-icon"></i>
@@ -18,15 +16,17 @@
       </div>
     </div>
 
-    <!-- 加载成功 -->
     <div v-else-if="community" class="community-content">
       <div class="community-header">
-        <h1>{{ community.communityName }}</h1>
-        <p class="community-title">{{ community.title }}</p>
+        <h1>社区: {{ community.name }}</h1>
         <p class="community-description">{{ community.description }}</p>
-        <p>创建者: {{ community.authorName }}</p>
 
         <div class="header-actions">
+          <button v-if="currentUserId === community.ownerId" class="edit-description-btn"
+            @click="openEditDescriptionModal">
+            ✏️ 修改描述
+          </button>
+
           <button class="create-post-btn" @click="showPostForm = true">
             创建帖子
           </button>
@@ -36,30 +36,17 @@
         </div>
       </div>
 
-      <!-- 创建帖子表单弹窗 -->
-      <div v-if="showPostForm" class="post-form-modal">
+      <div v-if="showPostForm" class="post-form-modal" @click.self="showPostForm = false">
         <div class="modal-content">
-          <h2>创建新帖子</h2>
+          <h2>创建新帖子到 {{ community.name }}</h2>
           <form @submit.prevent="handleSubmit">
             <div class="form-group">
               <label for="post-title">标题</label>
-              <input
-                type="text"
-                id="post-title"
-                v-model="newPost.title"
-                placeholder="输入帖子标题"
-                required
-              />
+              <input type="text" id="post-title" v-model="newPost.title" placeholder="输入帖子标题" required />
             </div>
             <div class="form-group">
-              <label for="post-description">内容</label>
-              <textarea
-                id="post-description"
-                v-model="newPost.description"
-                placeholder="输入帖子内容"
-                rows="5"
-                required
-              ></textarea>
+              <label for="post-content">内容</label>
+              <textarea id="post-content" v-model="newPost.content" placeholder="输入帖子内容" rows="5" required></textarea>
             </div>
             <div class="form-actions">
               <button type="button" class="cancel-btn" @click="showPostForm = false">
@@ -67,6 +54,51 @@
               </button>
               <button type="submit" class="submit-btn">
                 提交
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div v-if="showEditDescriptionModal" class="post-form-modal" @click.self="closeEditDescriptionModal">
+        <div class="modal-content">
+          <h2>修改 {{ community.name }} 社区描述</h2>
+          <form @submit.prevent="submitEditDescription">
+            <div class="form-group">
+              <label for="new-description">新描述</label>
+              <textarea id="new-description" v-model="newDescriptionContent" rows="5" required></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="cancel-btn" @click="closeEditDescriptionModal">
+                取消
+              </button>
+              <button type="submit" class="submit-btn">
+                保存修改
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div v-if="showEditPostModal" class="post-form-modal" @click.self="closeEditPostModal">
+        <div class="modal-content">
+          <h2>修改帖子</h2>
+          <form @submit.prevent="submitEditPost">
+            <div class="form-group">
+              <label for="edit-post-title">新标题</label>
+              <input type="text" id="edit-post-title" v-model="editingPost.title" placeholder="输入帖子新标题" required />
+            </div>
+            <div class="form-group">
+              <label for="edit-post-content">新内容</label>
+              <textarea id="edit-post-content" v-model="editingPost.content" placeholder="输入帖子新内容" rows="5"
+                required></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="cancel-btn" @click="closeEditPostModal">
+                取消
+              </button>
+              <button type="submit" class="submit-btn">
+                保存修改
               </button>
             </div>
           </form>
@@ -81,26 +113,12 @@
         </div>
 
         <div v-else>
-          <div class="post-card" v-for="post in posts" :key="post.postId" @click="goToPost(post.postId)">
-            <div class="votes">
-              <i class="fas fa-arrow-up"></i>
-              <span>{{ post.upvotes }}</span>
-            </div>
-            <div class="post-info">
-              <h3>{{ post.title }}</h3>
-              <p>{{ post.description.substring(0, 100) }}...</p>
-              <div class="post-meta">
-                <span>💬 {{ post.comments }} 评论</span>
-                <span>作者: {{ post.authorName }}</span>
-                <span>查看详情</span>
-              </div>
-            </div>
-          </div>
+          <post-list-item v-for="post in posts" :key="post.postId" :post="post" :currentUserId="currentUserId"
+            @goToPost="goToPost" @deletePost="handleDeletePost" @editPost="openEditPostModal" />
         </div>
       </div>
     </div>
 
-    <!-- 未找到 -->
     <div v-else class="error-state fade-in">
       <div class="error-box">
         <i class="fas fa-times-circle error-icon"></i>
@@ -114,9 +132,15 @@
 
 <script>
 import api from "@/api";
+import { communitiesAPI, postsAPI, usersAPI } from "@/api/index";
+import { mapGetters } from 'vuex';
+import PostListItem from '@/components/PostListItem.vue';
 
 export default {
   name: "CommunityDetailView",
+  components: {
+    PostListItem
+  },
   data() {
     return {
       isLoading: true,
@@ -126,9 +150,27 @@ export default {
       showPostForm: false,
       newPost: {
         title: '',
-        description: ''
+        content: ''
+      },
+      showEditDescriptionModal: false,
+      newDescriptionContent: '',
+      // 帖子编辑状态
+      showEditPostModal: false,
+      editingPost: {
+        postId: null,
+        title: '',
+        content: '',
+        originalTitle: '',
+        originalContent: '',
       },
     };
+  },
+  computed: {
+    ...mapGetters(['getUserId']),
+    currentUserId() {
+      const id = this.getUserId;
+      return id ? parseInt(id, 10) : null;
+    }
   },
   watch: {
     '$route.params.id': {
@@ -140,11 +182,6 @@ export default {
       }
     }
   },
-  computed: {
-    getUserInfo() {
-      return this.$store.state.user || {};
-    }
-  },
   methods: {
     async fetchCommunityData() {
       this.isLoading = true;
@@ -154,10 +191,42 @@ export default {
 
       try {
         const communityId = this.$route.params.id;
-        const response = await api.get(`/api/communities/${communityId}`);
-        
-        this.community = response.data.community;
-        this.posts = response.data.posts;
+
+        // --- 1. 获取社区详情 ---
+        const communityResponse = await api.get(`communities/${communityId}`);
+        this.community = {
+          ...communityResponse.data,
+          ownerId: communityResponse.data.ownerId || null
+        };
+
+        // --- 2. 获取社区帖子列表 ---
+        const postsResponse = await api.get(`communities/${communityId}/posts`);
+        const postsData = postsResponse.data;
+
+        // --- 3. 批量获取作者用户名 ---
+        const userIds = new Set(postsData.map(p => p.userId).filter(id => id !== undefined && id !== null));
+
+        const userPromises = Array.from(userIds).map(id =>
+          usersAPI.getUser(id)
+            .then(res => ({ userId: id, username: res.data.username || '未知用户' }))
+            .catch(() => ({ userId: id, username: '未知用户' }))
+        );
+        const users = await Promise.all(userPromises);
+        const userMap = new Map(users.map(u => [u.userId, u.username]));
+
+        // 4. 映射帖子数据并添加作者姓名
+        this.posts = postsData.map(p => ({
+          postId: p.postId,
+          userId: p.userId,
+          communityId: p.communityId,
+          title: p.postTitle,
+          description: p.postContent,
+          createdAt: p.createdAt,
+          authorName: userMap.get(p.userId) || '未知用户'
+        }));
+
+        this.newDescriptionContent = this.community.description;
+
       } catch (err) {
         console.error("获取社区数据失败:", err);
         this.error = true;
@@ -171,48 +240,155 @@ export default {
     goToPost(postId) {
       this.$router.push(`/posts/${postId}`);
     },
+
+    // --- 创建帖子逻辑 ---
     async createNewPost() {
       try {
-        const response = await api.post('/api/posts/createNewPost', {
-          title: this.newPost.title,
-          description: this.newPost.description,
-          communityId: this.community.communityId,
-          authorId: this.getUserInfo.userId
+        const communityId = parseInt(this.$route.params.id);
+        const response = await postsAPI.createPost({
+          communityId: communityId,
+          postTitle: this.newPost.title,
+          postContent: this.newPost.content,
         });
-        
-        console.log('帖子创建成功:', response.data);
+
         this.showPostForm = false;
-        this.newPost = { title: '', description: '' };
-        
-        // 刷新帖子列表
-        this.fetchCommunityData();
-        
-        // 跳转到新创建的帖子
-        this.$router.push(`/posts/${response.data.postId}`);
+        this.newPost = { title: '', content: '' };
+
+        if (response.data && response.data.postId) {
+          alert(`帖子创建成功!`);
+          await this.fetchCommunityData();
+          this.$router.push(`/posts/${response.data.postId}`);
+        } else {
+          alert(`帖子创建成功，但未能获取新帖子ID。`);
+          await this.fetchCommunityData();
+        }
       } catch (error) {
         console.error('创建帖子失败:', error);
-        alert('创建帖子失败，请重试');
+        let errorMessage = '创建帖子失败，请检查是否登录或输入是否符合要求。';
+        if (error.response?.status === 401) {
+          errorMessage = '创建帖子需要登录。请先登录您的账户！';
+        } else if (error.response?.data?.message) {
+          errorMessage = `创建帖子失败: ${error.response.data.message}`;
+        }
+        alert(errorMessage);
       }
     },
     handleSubmit() {
       this.createNewPost();
     },
-    formatDate(timestamp) {
-      const date = new Date(timestamp);
-      return date.toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+
+    // --- 删除帖子逻辑 ---
+    handleDeletePost(postId, postTitle) {
+      if (confirm(`确定要删除帖子 "${postTitle}" 吗？此操作不可逆！`)) {
+        this.deletePost(postId);
+      }
+    },
+    async deletePost(postId) {
+      try {
+        await postsAPI.deletePost(postId);
+        alert("帖子删除成功!");
+        await this.fetchCommunityData();
+      } catch (error) {
+        console.error('删除帖子失败:', error);
+        let errorMessage = '删除帖子失败，请检查是否是帖子作者或拥有管理员权限。';
+        if (error.response?.status === 401) {
+          errorMessage = '删除帖子需要登录。';
+        } else if (error.response?.status === 403) {
+          errorMessage = '您没有权限删除此帖子。';
+        }
+        alert(errorMessage);
+      }
+    },
+
+    // --- 修改社区描述逻辑 ---
+    openEditDescriptionModal() {
+      this.newDescriptionContent = this.community.description;
+      this.showEditDescriptionModal = true;
+    },
+    closeEditDescriptionModal() {
+      this.showEditDescriptionModal = false;
+    },
+    async submitEditDescription() {
+      const communityId = parseInt(this.$route.params.id);
+      const newDescription = this.newDescriptionContent.trim();
+
+      if (newDescription === this.community.description) {
+        return alert("描述内容没有变化。");
+      }
+
+      try {
+        await communitiesAPI.updateDescription(communityId, newDescription);
+        alert("社区描述修改成功!");
+        this.closeEditDescriptionModal();
+        await this.fetchCommunityData();
+      } catch (error) {
+        console.error('修改描述失败:', error);
+        let errorMessage = '修改描述失败，请检查是否是社区创建者或拥有管理员权限。';
+        if (error.response?.status === 401) {
+          errorMessage = '修改描述需要登录。';
+        } else if (error.response?.status === 403) {
+          errorMessage = '您没有权限修改此社区描述。';
+        }
+        alert(errorMessage);
+      }
+    },
+
+    // --- 修改帖子逻辑 ---
+    openEditPostModal(post) {
+      this.editingPost.postId = post.postId;
+      this.editingPost.title = post.title;
+      this.editingPost.content = post.description;
+      this.editingPost.originalTitle = post.title;
+      this.editingPost.originalContent = post.description;
+      this.showEditPostModal = true;
+    },
+
+    closeEditPostModal() {
+      this.showEditPostModal = false;
+      this.editingPost = { postId: null, title: '', content: '', originalTitle: '', originalContent: '' };
+    },
+
+    async submitEditPost() {
+      const postId = this.editingPost.postId;
+      const newTitle = this.editingPost.title.trim();
+      const newContent = this.editingPost.content.trim();
+
+      if (!newTitle || !newContent || !postId) return alert("标题或内容不能为空。");
+
+      if (newTitle === this.editingPost.originalTitle && newContent === this.editingPost.originalContent) {
+        return alert("帖子标题和内容没有发生变化。");
+      }
+
+      try {
+        await postsAPI.updatePost(postId, {
+          postTitle: newTitle,
+          postContent: newContent,
+        });
+
+        alert("帖子修改成功！");
+        this.closeEditPostModal();
+
+        // 刷新数据并跳转到帖子详情页查看修改结果 (可选)
+        await this.fetchCommunityData();
+        this.$router.push(`/posts/${postId}`);
+
+      } catch (error) {
+        console.error('修改帖子失败:', error);
+        let errorMessage = '修改帖子失败，请检查是否是帖子作者。';
+        if (error.response?.status === 401) {
+          errorMessage = '修改操作需要登录。';
+        } else if (error.response?.status === 403) {
+          errorMessage = '您没有权限修改此帖子。';
+        }
+        alert(errorMessage);
+      }
     },
   },
 };
 </script>
 
 <style scoped>
-/* ===== 样式保持原来的代码 ===== */
+/* ===== 错误/加载状态 ===== */
 .community-detail-container {
   width: 80%;
   margin: 30px auto;
@@ -297,6 +473,7 @@ export default {
   }
 }
 
+/* ===== 社区头部 ===== */
 .community-header {
   background: white;
   padding: 30px;
@@ -311,13 +488,6 @@ export default {
   margin-bottom: 5px;
 }
 
-.community-title {
-  font-size: 1.5rem;
-  color: #2c3e50;
-  font-weight: bold;
-  margin-bottom: 10px;
-}
-
 .community-description {
   color: #7f8c8d;
   margin-bottom: 20px;
@@ -330,6 +500,23 @@ export default {
   justify-content: flex-start;
 }
 
+/* 修改描述按钮样式 */
+.edit-description-btn {
+  background: #f39c12;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 4px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: background 0.2s;
+  border: none;
+  cursor: pointer;
+}
+
+.edit-description-btn:hover {
+  background: #d35400;
+}
+
 .create-post-btn {
   background: #2ecc71;
   color: white;
@@ -338,12 +525,16 @@ export default {
   text-decoration: none;
   font-weight: 600;
   transition: background 0.2s;
+  border: none;
+  cursor: pointer;
 }
 
 .create-post-btn:hover {
   background: #27ae60;
 }
 
+
+/* ===== 帖子列表容器 ===== */
 .posts-list h2 {
   font-size: 1.5rem;
   color: #2c3e50;
@@ -359,23 +550,8 @@ export default {
   color: #7f8c8d;
 }
 
-.post-card {
-  display: flex;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.05);
-  padding: 15px;
-  margin-bottom: 15px;
-  transition: transform 0.2s;
-  cursor: pointer;
-}
 
-.post-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-}
-
-/* 帖子表单弹窗样式 */
+/* ===== 弹窗 (创建 & 修改) 样式 ===== */
 .post-form-modal {
   position: fixed;
   top: 0;
@@ -463,29 +639,5 @@ export default {
 
 .submit-btn:hover {
   background: #27ae60;
-}
-
-.votes {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-right: 15px;
-  color: #7f8c8d;
-  font-weight: bold;
-}
-
-.post-info h3 {
-  font-size: 1.2rem;
-  color: #2c3e50;
-  margin-bottom: 5px;
-}
-
-.post-meta {
-  display: flex;
-  gap: 15px;
-  color: #7f8c8d;
-  font-size: 0.85rem;
-  margin-top: 10px;
-  flex-wrap: wrap;
 }
 </style>

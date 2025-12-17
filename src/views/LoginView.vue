@@ -52,7 +52,7 @@
 </template>
 
 <script>
-import api from '@/api/index'; 
+import { authAPI } from '@/api/index';
 
 export default {
   name: "LoginView",
@@ -115,7 +115,7 @@ export default {
       this.apiError = '';
 
       try {
-        const response = await api.post('/api/auth/login', {
+        const response = await authAPI.login({
           username: this.form.username,
           password: this.form.password
         });
@@ -129,7 +129,6 @@ export default {
         });
         
         this.$router.push('/home');
-
       } catch (error) {
         console.error("登录错误:", error);
         
